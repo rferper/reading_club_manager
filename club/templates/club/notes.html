@@ -1,0 +1,54 @@
+{% extends "club/base.html" %}
+
+{% block title %}Notes — Reading Club Manager{% endblock %}
+
+{% block content %}
+  <h1>Notes</h1>
+
+  {% if not book %}
+    <p class="empty">
+      No book in progress — an admin can start one. Notes belong to a book, so
+      there is nowhere to put one yet.
+    </p>
+  {% else %}
+    <p class="byline">on {{ book.title }} by {{ book.author }}</p>
+
+    {% if current_member %}
+      <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Post note</button>
+      </form>
+    {% else %}
+      <p class="empty">
+        <a href="{% url 'club:identify' %}?next={{ request.get_full_path|urlencode }}">Say who you are</a>
+        to post a note. Anyone can read them.
+      </p>
+    {% endif %}
+
+    {% for row in rows %}
+      <div class="panel note">
+        {% comment %}
+          `linebreaks` escapes first and then adds the markup, so a body
+          containing <script> renders as the characters somebody typed.
+        {% endcomment %}
+        {{ row.note.body|linebreaks }}
+
+        <div class="byline note__byline">
+          <span>{{ row.note.author.name }} · {{ row.note.created_on }}</span>
+
+          {% if row.may_remove %}
+            <form method="post" action="{% url 'club:note_delete' row.note.pk %}">
+              {% csrf_token %}
+              <button type="submit">Remove</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    {% empty %}
+      <p class="empty">
+        No notes on {{ book.title }} yet — the first one can be yours.
+      </p>
+    {% endfor %}
+  {% endif %}
+{% endblock %}

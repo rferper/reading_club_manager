@@ -3,6 +3,7 @@ from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.db.models import F, OuterRef, Subquery
 from django.db.models.functions import Lower
 from django.shortcuts import get_object_or_404, redirect, render
@@ -11,9 +12,15 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from .decorators import club_admin_required, require_member
-from .forms import AdminPinForm, IdentityForm, MemberForm, ProgressForm
+from .forms import (
+    AdminPinForm,
+    IdentityForm,
+    MemberForm,
+    NoteForm,
+    ProgressForm,
+)
 from .identity import current_member, forget_member, remember_member
-from .models import Book, Member, Progress
+from .models import Book, Member, Note, Progress
 
 
 def home(request):
@@ -318,3 +325,82 @@ def progress_overview(request):
         "club/progress.html",
         {"book": book, "rows": rows},
     )
+
+
+def notes(request):
+    """Notes on the current book, newest first, plus the form to add one.
+
+    Reading is open to anyone. Posting needs a name, which is attribution and
+    not authorisation — decision #5.
+    """
+    if request.method == "POST":
+        return _post_note(request)
+
+    return _render_notes(request, NoteForm())
+
+
+def _render_notes(request, form):
+    book = Book.objects.current()
+    viewer = current_member(request)
+    is_admin = bool(request.session.get("is_club_admin"))
+
+    # Each note is paired with whether this viewer may remove it, asked of the
+    # model rather than re-derived in the template. The button is decoration
+    # either way — `note_delete` asks the same question again.
+    rows = [
+        {"note": note, "may_remove": note.may_be_removed_by(viewer, is_admin)}
+        for note in (book.notes.select_related("author") if book else [])
+    ]
+
+    return render(
+        request,
+        "club/notes.html",
+        {"book": book, "rows": rows, "form": form},
+    )
+
+
+@require_member
+def _post_note(request):
+    """Post a note as the session's member.
+
+    Not routed: `notes` dispatches here on POST. The decorator does the
+    refusing, so an unidentified POST is a 403 rather than a redirect that
+    would drop what the member typed — decision #16.
+    """
+    book = Book.objects.current()
+
+    if book is None:
+        messages.error(request, "There is no current book to write about.")
+        return redirect("club:home")
+
+    form = NoteForm(request.POST)
+
+    if not form.is_valid():
+        return _render_notes(request, form)
+
+    note = form.save(commit=False)
+    note.book = book
+    note.author = current_member(request)
+    note.save()
+
+    messages.success(request, "Note posted.")
+    return redirect("club:notes")
+
+
+@require_POST
+def note_delete(request, pk):
+    """Remove a note — its author, or an admin. Decision #7.
+
+    A 403 rather than a redirect, because a member acting on somebody else's
+    note is a real refusal and not a missing step.
+    """
+    note = get_object_or_404(Note, pk=pk)
+
+    if not note.may_be_removed_by(
+        current_member(request), request.session.get("is_club_admin")
+    ):
+        raise PermissionDenied("A note is removed by the member who wrote it.")
+
+    note.delete()
+    messages.success(request, "Note removed.")
+    return redirect("club:notes")

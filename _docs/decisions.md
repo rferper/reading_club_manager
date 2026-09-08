@@ -404,3 +404,35 @@ Why: the design system gives the bar the whole visual budget and says the number
 always sits next to it. The bar repeats what the text already says, so announcing
 it twice to a screen reader is noise; hiding it leaves the number, which is the
 part that carries the meaning.
+
+## 20. A note's author is `PROTECT`, and the nav names Notes and Questions separately
+
+Settled while building notes (#11).
+
+**`Note.author` is `on_delete=PROTECT`.** Deleting a member who has written
+anything raises rather than cascading or orphaning.
+
+Why: decision #3 says a member who leaves the club leaves the roster, not the
+record, and `MemberAdmin` already refuses deletion. That refusal lives in one
+admin class, which a fixture, a shell or a future management command walks
+straight past. `PROTECT` is the same rule in the schema, where everything has to
+meet it. `Progress` stays `CASCADE` on both sides: a page count is not a
+contribution to the record, and keeping one for a member who is gone tells the
+club nothing.
+
+`Note.book` is `CASCADE` in the other direction — a book's discussion is about
+that book and means nothing without it.
+
+**Who may remove a note is a model method, `Note.may_be_removed_by`**, and the
+template asks it through the view rather than re-deriving the rule.
+
+Why: the button and the POST handler must not be able to disagree. AGENTS.md
+already says hiding a control is decoration; this keeps the decoration honest by
+having it read from the same place the enforcement does.
+
+**The nav says "Notes" and, from #12, "Questions" — not one "Discussion" entry.**
+
+Why: #2 sketched a single Discussion link, before the two surfaces existed. They
+are different acts — a note is a reaction anyone posts, a question is a prompt
+only an admin posts — they live at different URLs, and a member looking for one
+should not have to guess which page a "Discussion" link lands on.

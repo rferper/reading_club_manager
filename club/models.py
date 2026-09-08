@@ -179,3 +179,44 @@ class Progress(models.Model):
         disagree about what half of the same book is.
         """
         return self.book.percent_of(self.pages_read)
+
+
+class Note(models.Model):
+    """One member's spontaneous thought about one book.
+
+    Immutable by design (decision #7): a note is a timestamped reaction, and
+    editing it after the fact rewrites the conversation that formed around it.
+    It can be removed by its author or an admin, because the alternative to
+    deleting a regretted note is not posting one.
+
+    The book is a foreign key rather than "whatever is current" (decision #8),
+    so the archive can replay a finished book's discussion.
+    """
+
+    book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name="notes")
+
+    # PROTECT, not CASCADE: a member who leaves the club leaves the roster, not
+    # the record (decision #3). Deactivating is the supported way out, and the
+    # admin already refuses deletion; this is the second lock, in the schema,
+    # where a fixture or a shell would otherwise walk straight past the first.
+    author = models.ForeignKey(Member, on_delete=models.PROTECT, related_name="notes")
+
+    body = models.TextField()
+    created_on = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Newest first, which is the order the page reads in. `-pk` breaks the
+        # tie between two notes saved inside the same clock tick.
+        ordering = ["-created_on", "-pk"]
+
+    def __str__(self):
+        return f"{self.author} on {self.book.title}"
+
+    def may_be_removed_by(self, member, is_admin):
+        """Whether this viewer may remove this note — decision #7.
+
+        A convention rather than a boundary (decision #5 again: anyone may pick
+        any name), but the view enforces it anyway. Hiding the button is
+        decoration; this is what the POST handler asks.
+        """
+        return bool(is_admin or (member is not None and member.pk == self.author_id))

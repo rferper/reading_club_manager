@@ -16,4 +16,6 @@ urlpatterns = [
     path("members/<int:pk>/toggle/", views.member_toggle, name="member_toggle"),
     path("progress/", views.progress_overview, name="progress"),
     path("progress/update/", views.progress_update, name="progress_update"),
+    path("notes/", views.notes, name="notes"),
+    path("notes/<int:pk>/delete/", views.note_delete, name="note_delete"),
 ]

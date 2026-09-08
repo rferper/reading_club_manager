@@ -44,9 +44,10 @@
           <li><a href="{% url 'club:home' %}">Home</a></li>
           <li><a href="{% url 'club:member_list' %}">Members</a></li>
           <li><a href="{% url 'club:progress' %}">Progress</a></li>
+          <li><a href="{% url 'club:notes' %}">Notes</a></li>
 
           {% comment %}
-            Discussion (#12) and History (#14) each add their own entry here,
+            Questions (#12) and History (#14) each add their own entry here,
             in the same change that adds their route. Do not add a link before
             its route exists: a {% url %} tag
             against a missing route raises NoReverseMatch, and because every
