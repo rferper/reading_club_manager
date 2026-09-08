@@ -1,0 +1,34 @@
+{% extends "club/base.html" %}
+
+{% block title %}Who are you? — Reading Club Manager{% endblock %}
+
+{% block content %}
+  <h1>Who are you?</h1>
+
+  {% if roster_is_empty %}
+    <p class="empty">
+      Nobody is on the roster yet — an admin can add the first member from the
+      <a href="{% url 'club:member_list' %}">members page</a>.
+    </p>
+  {% else %}
+    <p class="empty">
+      Pick your name once and the club remembers it while you are here. It puts
+      your name on your progress, your notes and your answers. There is no
+      password: anyone can pick anyone, so this is a convenience, not a lock.
+    </p>
+
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <input type="hidden" name="next" value="{{ next }}">
+      <button type="submit">That is me</button>
+    </form>
+  {% endif %}
+
+  {% if current_member %}
+    <form method="post" action="{% url 'club:forget_me' %}">
+      {% csrf_token %}
+      <button type="submit">Forget me</button>
+    </form>
+  {% endif %}
+{% endblock %}

@@ -14,11 +14,14 @@
         <a class="site-title" href="{% url 'club:home' %}">Reading Club Manager</a>
 
         <div class="site-status">
-          {% comment %}
-            SLOT: identity indicator. Issue #6 fills this with
-            "You are: Ada — switch", or an invitation when nobody has
-            identified themselves yet.
-          {% endcomment %}
+          <div class="site-identity">
+            {% if current_member %}
+              <span>You are: {{ current_member.name }}</span>
+              <a href="{% url 'club:identify' %}?next={{ request.get_full_path|urlencode }}">switch</a>
+            {% else %}
+              <a href="{% url 'club:identify' %}?next={{ request.get_full_path|urlencode }}">Who are you?</a>
+            {% endif %}
+          </div>
 
           {% if is_club_admin %}
             <div class="admin-mode admin-only">

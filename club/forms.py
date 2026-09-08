@@ -44,3 +44,21 @@ class MemberForm(forms.ModelForm):
             "joined_on": "Defaults to today. Backdate it for a founding member.",
         }
         widgets = {"joined_on": forms.DateInput(attrs={"type": "date"})}
+
+
+class IdentityForm(forms.Form):
+    """Pick your name off the roster.
+
+    Anyone may pick anyone — decision #5. There is no password here and there
+    is not going to be one; the point is attribution, so that a note has a name
+    on it, not authentication.
+
+    The queryset is filtered but not cached: it is re-evaluated on every render,
+    so a member deactivated this morning is gone from the list this afternoon.
+    """
+
+    member = forms.ModelChoiceField(
+        queryset=Member.objects.filter(is_active=True),
+        label="Your name",
+        empty_label="Pick your name",
+    )

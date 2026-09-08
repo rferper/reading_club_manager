@@ -72,6 +72,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'club.context_processors.is_club_admin',
+                'club.context_processors.current_member',
             ],
         },
     },
