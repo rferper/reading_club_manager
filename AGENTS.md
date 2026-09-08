@@ -12,6 +12,7 @@ progress, discussion, and the full history of past books. Scope is
 - `uv run python manage.py test club.tests.test_books` — one module
 - `uv run python manage.py makemigrations club` then `migrate` — after model changes
 - `uv run python manage.py check` — must stay at zero issues
+- `uv run python manage.py loaddata dev_seed` — fill a fresh database with the demo club
 
 There is no `pytest` here and no top-level `tests/` directory. Tests live in
 `club/tests/`, one module per area, and run under Django's own runner, which
@@ -26,6 +27,7 @@ builds and destroys a temporary database per run. See
 | `reading_club/` | project package — settings, root URLconf, wsgi/asgi |
 | `club/` | the single app — all models, views, forms, templates |
 | `club/tests/` | the suite, one module per area |
+| `club/fixtures/dev_seed.json` | the demo club — `loaddata dev_seed` |
 | `club/templates/club/` | templates (`APP_DIRS` is on; the project's `DIRS` stays empty) |
 | `club/static/club/` | one hand-written stylesheet, no build step |
 | `_docs/` | spec, backlog, conventions, decisions |

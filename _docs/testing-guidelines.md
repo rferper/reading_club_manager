@@ -21,6 +21,7 @@ is a new module and nothing else. What is there now:
 | `test_questions.py` | the `Question` model, its order, the admin-only controls |
 | `test_answers.py` | the `Answer` model, its one-per-member rule, the answer forms |
 | `test_history.py` | finishing a book, the archive, and what survives the move |
+| `test_seed_fixture.py` | `dev_seed.json` — that it loads, and that it is untidy enough to be useful |
 
 Put a test in the module that owns the rule it protects, not the module that
 owns the URL it happens to hit. Imports inside the package are relative to it:
