@@ -20,6 +20,8 @@
         No start date recorded — an admin can add one from the Django admin.
       </p>
     {% endif %}
+
+    <p><a href="{% url 'club:progress_update' %}">How far are you?</a></p>
   {% else %}
     <h1>Reading Club Manager</h1>
 

@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Member
+from .models import Member, Progress
 
 
 class AdminPinForm(forms.Form):
@@ -62,3 +62,43 @@ class IdentityForm(forms.Form):
         label="Your name",
         empty_label="Pick your name",
     )
+
+
+class ProgressForm(forms.ModelForm):
+    """How far you have read.
+
+    There is no member field and there never will be — decision #4. The view
+    takes the member from the session, so this form cannot be used to post as
+    somebody else, and nobody has to pick their own name twice.
+
+    The upper bound belongs to the book rather than to the field, so it is
+    checked here rather than declared on the model.
+    """
+
+    class Meta:
+        model = Progress
+        fields = ("pages_read",)
+        labels = {"pages_read": "Pages read"}
+
+    def __init__(self, *args, book, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.book = book
+
+        if book.total_pages:
+            self.fields["pages_read"].help_text = f"Out of {book.total_pages}."
+            self.fields["pages_read"].widget.attrs["max"] = book.total_pages
+        else:
+            self.fields["pages_read"].help_text = (
+                "No page count is recorded for this book, so this shows as pages "
+                "rather than a percentage."
+            )
+
+    def clean_pages_read(self):
+        pages_read = self.cleaned_data["pages_read"]
+
+        if self.book.total_pages and pages_read > self.book.total_pages:
+            raise forms.ValidationError(
+                f"{self.book.title} is only {self.book.total_pages} pages long."
+            )
+
+        return pages_read

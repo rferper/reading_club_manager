@@ -1,0 +1,32 @@
+{% extends "club/base.html" %}
+
+{% block title %}How far are you? — Reading Club Manager{% endblock %}
+
+{% block content %}
+  <h1>How far are you?</h1>
+
+  <div class="panel">
+    <p class="current-book__title">{{ book.title }}</p>
+    <p class="byline">by {{ book.author }}</p>
+  </div>
+
+  {% if progress.pk %}
+    <p class="empty">
+      You last recorded {{ progress.pages_read }}
+      pages{% if book.total_pages %} — {{ progress.percent }}%{% endif %}
+      on {{ progress.updated_on }}. Saving again replaces it.
+    </p>
+  {% else %}
+    <p class="empty">
+      You have not recorded anything on this one yet.
+    </p>
+  {% endif %}
+
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Save progress</button>
+  </form>
+
+  <p><a href="{% url 'club:home' %}">Back to the current book</a></p>
+{% endblock %}

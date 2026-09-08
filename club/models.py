@@ -109,3 +109,60 @@ class Book(models.Model):
 
     def __str__(self):
         return f"{self.title} by {self.author}"
+
+
+class Progress(models.Model):
+    """How far one member has read one book.
+
+    Pages are the stored truth and the percentage is derived (decision #1).
+    Comparing members is the whole point of the feature, and that needs one
+    common scale — two members can never disagree about what 50% of the same
+    book is if neither of them stores it.
+
+    One row per member per book, enforced in the database. Recording progress
+    again updates the row; it does not add a second one. A member's progress
+    over time would be a different model, and it is #18.
+    """
+
+    book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name="progress")
+    member = models.ForeignKey(
+        Member, on_delete=models.CASCADE, related_name="progress"
+    )
+    pages_read = models.PositiveIntegerField(default=0)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "progress"
+        # Furthest along first, then by name, which is the order #10's overview
+        # reads in. Ties are common — everyone starts on zero.
+        ordering = ["-pages_read", Lower("member__name")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["book", "member"],
+                name="one_progress_row_per_member_per_book",
+                violation_error_message=(
+                    "That member already has progress recorded on this book."
+                ),
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.member} — {self.pages_read} pages of {self.book.title}"
+
+    @property
+    def percent(self):
+        """Whole percent of the book read, or ``None`` with no page count.
+
+        Derived on every read, never stored — decision #1. A book with no
+        ``total_pages`` recorded shows raw pages instead of a percentage, which
+        decision #1 accepts as a data-entry problem rather than a modelling one;
+        returning ``None`` is how the templates know to do that.
+
+        Capped at 100. Pages read can legitimately exceed the total after an
+        admin corrects a page count downwards, and a bar past its own track is
+        a rendering bug rather than information.
+        """
+        if not self.book.total_pages:
+            return None
+
+        return min(100, round(100 * self.pages_read / self.book.total_pages))

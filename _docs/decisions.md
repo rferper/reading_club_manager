@@ -332,3 +332,37 @@ Why: a `save()` that silently cleared the other book's flag would make finishing
 a book a side effect of starting the next one, and would hide the moment the
 club has no current read — which decision #2 says is a state the app supports,
 not a gap to paper over.
+
+## 18. `/progress/update/` answers GET, and the derived percentage is capped
+
+Settled while building progress (#9). Two calls the issue left open.
+
+**The route takes GET as well as POST**, and `_docs/api.md` has been corrected
+from the POST-only row it carried while the route was still planned.
+
+Why: #9 requires that an unidentified visitor is sent to the picker and returned
+afterwards, and a return needs somewhere to land. Decision #16 makes an
+unidentified POST a 403 precisely because `?next=` to a POST-only route lands on
+a 405 — so a POST-only progress route could not satisfy that requirement at all.
+GET renders the form; POST saves and redirects, so a refresh cannot resubmit.
+
+The GET writes nothing. `Progress.objects.filter(...).first()` and an unsaved
+instance, not `get_or_create`: a member who opens the form and closes it again
+has recorded nothing, and the overview shows them as zero either way.
+
+**`Progress.percent` is capped at 100** and returns `None` when the book has no
+page count — or a page count of zero, which is a typo rather than a book.
+
+Why the cap: pages read can legitimately exceed the total after an admin
+corrects a page count downwards, and the number feeds a CSS bar whose width is
+that percentage. A bar past its own track is a rendering bug, not information.
+The stored pages stay untouched, so nothing is lost — only the display is
+clamped.
+
+**Recording progress when no book is current redirects home with an error
+message** rather than returning a status code.
+
+Why: this is not a refusal about who the viewer is, which is what a 403 says.
+It is an action that has momentarily stopped meaning anything, and the club
+member wants to be told so on a page they can read. Nothing is written either
+way, and the test asserts that.
