@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Member, Note, Progress
+from .models import Member, Note, Progress, Question
 
 
 class AdminPinForm(forms.Form):
@@ -125,3 +125,19 @@ class NoteForm(forms.ModelForm):
             )
         }
         error_messages = {"body": {"required": "A note needs something in it."}}
+
+
+class QuestionForm(forms.ModelForm):
+    """A discussion prompt, and where it sits in the sequence.
+
+    Admin-only. The book comes from what the club is reading, not from the
+    form — decision #8 makes the foreign key explicit, but nothing lets the
+    submitter choose it.
+    """
+
+    class Meta:
+        model = Question
+        fields = ("text", "position")
+        labels = {"text": "Question", "position": "Position"}
+        widgets = {"text": forms.Textarea(attrs={"rows": 3})}
+        error_messages = {"text": {"required": "A question needs something in it."}}

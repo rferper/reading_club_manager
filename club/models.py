@@ -220,3 +220,32 @@ class Note(models.Model):
         decoration; this is what the POST handler asks.
         """
         return bool(is_admin or (member is not None and member.pk == self.author_id))
+
+
+class Question(models.Model):
+    """A discussion prompt the admin posts against a book.
+
+    Admin-posted, not member-proposed — that is what `_docs/plan.md` says
+    structured Q&A is. Members answer them in #13.
+
+    The book is a foreign key (decision #8) so the archive can replay a past
+    book's discussion, and the order is a field the admin sets rather than the
+    order they happened to be typed in: a reading group's questions have a
+    shape, and it is rarely chronological.
+    """
+
+    book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name="questions")
+    text = models.TextField()
+    position = models.PositiveIntegerField(
+        default=1, help_text="Lower numbers come first. Ties fall back to age."
+    )
+    created_on = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # The admin's order, then age. Never creation time alone — #12 is
+        # explicit that the sequence is a decision, not a side effect.
+        ordering = ["position", "pk"]
+
+    def __str__(self):
+        return self.text
+

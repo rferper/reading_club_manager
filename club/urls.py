@@ -18,4 +18,10 @@ urlpatterns = [
     path("progress/update/", views.progress_update, name="progress_update"),
     path("notes/", views.notes, name="notes"),
     path("notes/<int:pk>/delete/", views.note_delete, name="note_delete"),
+    path("questions/", views.questions, name="questions"),
+    path("questions/add/", views.question_add, name="question_add"),
+    path("questions/<int:pk>/edit/", views.question_edit, name="question_edit"),
+    path(
+        "questions/<int:pk>/delete/", views.question_delete, name="question_delete"
+    ),
 ]

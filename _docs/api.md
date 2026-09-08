@@ -37,10 +37,10 @@ status to Built; add a row before inventing a route that is not here.
 | `/progress/update/` | `progress_update` | GET, POST | Member | Your own pages read: GET the form, POST to save | #9 | Built |
 | `/notes/` | `notes` | GET, POST | GET Public, POST Member | Notes newest-first, plus the add form | #11 | Built |
 | `/notes/<pk>/delete/` | `note_delete` | POST | Author or Admin | Remove a note | #11 | Built |
-| `/questions/` | `questions` | GET, POST | GET Public, POST Member | Questions in order with their answers; POST submits your answer | #12, #13 | Planned |
-| `/questions/add/` | `question_add` | GET, POST | Admin | Post a discussion question | #12 | Planned |
-| `/questions/<pk>/edit/` | `question_edit` | GET, POST | Admin | Edit or reorder a question | #12 | Planned |
-| `/questions/<pk>/delete/` | `question_delete` | GET, POST | Admin | Remove a question and its answers | #12 | Planned |
+| `/questions/` | `questions` | GET, POST | GET Public, POST Member | Questions in order with their answers; POST submits your answer | #12, #13 | GET built in #12; #13 adds the answers and the POST |
+| `/questions/add/` | `question_add` | GET, POST | Admin | Post a discussion question | #12 | Built |
+| `/questions/<pk>/edit/` | `question_edit` | GET, POST | Admin | Edit or reorder a question | #12 | Built |
+| `/questions/<pk>/delete/` | `question_delete` | GET, POST | Admin | Remove a question and its answers | #12 | Built |
 | `/history/` | `history` | GET | Public | Every finished book, newest first, uncapped | #14 | Planned |
 | `/history/<pk>/` | `history_detail` | GET | Public | One past book, its notes and answers, read-only | #14 | Planned |
 | `/books/start/` | `book_start` | GET, POST | Admin | Start a new current book | #14 | Planned |
