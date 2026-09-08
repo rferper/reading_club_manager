@@ -19,6 +19,7 @@ is a new module and nothing else. What is there now:
 | `test_progress_overview.py` | the group table, its ordering, its query count |
 | `test_notes.py` | the `Note` model, the notes page, who may remove one |
 | `test_questions.py` | the `Question` model, its order, the admin-only controls |
+| `test_answers.py` | the `Answer` model, its one-per-member rule, the answer forms |
 
 Put a test in the module that owns the rule it protects, not the module that
 owns the URL it happens to hit. Imports inside the package are relative to it:

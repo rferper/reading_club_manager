@@ -19,15 +19,58 @@
       </p>
     {% endif %}
 
-    {% for question in questions %}
+    {% if not current_member %}
+      <p class="empty">
+        <a href="{% url 'club:identify' %}?next={{ request.get_full_path|urlencode }}">Say who you are</a>
+        to answer. Anyone can read the answers.
+      </p>
+    {% endif %}
+
+    {% for row in rows %}
       <div class="panel question">
-        <p class="question__text">{{ question.text|linebreaksbr }}</p>
+        <p class="question__text">{{ row.question.text|linebreaksbr }}</p>
 
         {% if is_club_admin %}
           <div class="admin-only question__controls">
-            <a href="{% url 'club:question_edit' question.pk %}">Edit</a>
-            <a href="{% url 'club:question_delete' question.pk %}">Remove</a>
+            <a href="{% url 'club:question_edit' row.question.pk %}">Edit</a>
+            <a href="{% url 'club:question_delete' row.question.pk %}">Remove</a>
           </div>
+        {% endif %}
+
+        {% for answer in row.answers %}
+          <div class="answer">
+            {{ answer.body|linebreaks }}
+            <p class="byline">
+              {{ answer.member.name }} ·
+              {% if answer.was_edited %}edited {{ answer.updated_on }}{% else %}{{ answer.created_on }}{% endif %}
+            </p>
+          </div>
+        {% empty %}
+          <p class="empty">Nobody has answered this one yet.</p>
+        {% endfor %}
+
+        {% if current_member %}
+          {% if row.mine %}
+            {% comment %}
+              An answer is a standing position and editing it is the point
+              (decision #7), but the form is folded away so ten answered
+              questions do not become ten open textareas.
+            {% endcomment %}
+            <details class="answer-form" {% if row.form.errors %}open{% endif %}>
+              <summary>Edit your answer</summary>
+              <form method="post">
+                {% csrf_token %}
+                {{ row.form.as_p }}
+                <button type="submit">Save answer</button>
+              </form>
+            </details>
+          {% else %}
+            <form class="answer-form" method="post">
+              {% csrf_token %}
+              {{ row.form.as_p }}
+              <button type="submit">Post answer</button>
+            </form>
+          {% endif %}
         {% endif %}
       </div>
     {% empty %}

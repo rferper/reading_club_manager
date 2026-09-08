@@ -384,3 +384,31 @@ button {
   margin-top: 0.5rem;
   font-size: 0.9rem;
 }
+
+/* Answers ----------------------------------------------------------------- */
+
+/* Indented under the question they belong to, with a rule rather than a box:
+ * a panel inside a panel reads as two things rather than one. */
+.answer {
+  margin-top: 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--rule);
+}
+
+.answer p:first-child {
+  margin-top: 0;
+}
+
+.answer .byline {
+  margin-bottom: 0;
+}
+
+.answer-form {
+  margin-top: 0.75rem;
+}
+
+.answer-form summary {
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
