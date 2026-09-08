@@ -366,3 +366,41 @@ Why: this is not a refusal about who the viewer is, which is what a 403 says.
 It is an action that has momentarily stopped meaning anything, and the club
 member wants to be told so on a page they can read. Nothing is written either
 way, and the test asserts that.
+
+## 19. Nothing recorded and a recorded zero are different, and the arithmetic lives on `Book`
+
+Settled while building the progress overview (#10).
+
+**`Book.percent_of(pages_read)` owns the calculation**, and `Progress.percent`
+calls it.
+
+Why: two callers read the same book. A stored `Progress` row has one, and the
+overview annotates each member with a page count through a subquery and has no
+`Progress` instance to ask. Decision #1 exists so that two members can never
+disagree about what half of the same book is; two copies of the arithmetic would
+be exactly the disagreement it was written to prevent.
+
+**A member with no `Progress` row is annotated `None`, not zero**, and the table
+says "not started" for them and "0 of 880" for somebody who recorded a zero.
+
+Why: they sort the same and neither is omitted — #10 is explicit that the person
+who has not started is who the table is about. But they mean different things.
+"Not started" is a fact about the club; a recorded zero is a member saying "I
+have the book and I am on page nought", which is a different sentence. Design
+system: never a bare zero.
+
+**One query for the roster, whatever its size**, via `Subquery` rather than
+walking `member.progress` per row, and `assertNumQueries(2)` pins it at two
+members and again at twenty-two.
+
+Why: the N+1 here is invisible at the size the club will ever be, which is
+exactly why it needs a test rather than a look. The count is asserted twice at
+different sizes so the test says "does not grow", not "was two once".
+
+**Progress is a table, not a chart.** The bar is a CSS width carrying
+`aria-hidden="true"`, with the percentage as text beside it.
+
+Why: the design system gives the bar the whole visual budget and says the number
+always sits next to it. The bar repeats what the text already says, so announcing
+it twice to a screen reader is noise; hiding it leaves the number, which is the
+part that carries the meaning.

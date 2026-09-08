@@ -21,7 +21,11 @@
       </p>
     {% endif %}
 
-    <p><a href="{% url 'club:progress_update' %}">How far are you?</a></p>
+    <p>
+      <a href="{% url 'club:progress' %}">How is everyone doing?</a>
+      ·
+      <a href="{% url 'club:progress_update' %}">Record your own progress</a>
+    </p>
   {% else %}
     <h1>Reading Club Manager</h1>
 

@@ -1,0 +1,71 @@
+{% extends "club/base.html" %}
+
+{% block title %}Progress — Reading Club Manager{% endblock %}
+
+{% block content %}
+  <h1>Progress</h1>
+
+  {% if not book %}
+    <p class="empty">
+      No book in progress — an admin can start one. There is nothing to be ahead
+      or behind on yet.
+    </p>
+  {% elif not rows %}
+    <p class="empty">
+      Nobody is on the roster yet — an admin can add the first member from the
+      <a href="{% url 'club:member_list' %}">members page</a>.
+    </p>
+  {% else %}
+    <p class="byline">
+      {{ book.title }} by {{ book.author }}{% if book.total_pages %}, {{ book.total_pages }} pages{% endif %}
+    </p>
+
+    <table class="progress-table">
+      <thead>
+        <tr>
+          <th scope="col">Member</th>
+          <th scope="col">Read</th>
+          <th scope="col">How far</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <th scope="row">{{ row.member.name }}</th>
+
+            <td>
+              {% if row.has_recorded %}
+                {{ row.pages_read }}{% if book.total_pages %} of {{ book.total_pages }}{% endif %}
+              {% else %}
+                <span class="empty">not started</span>
+              {% endif %}
+            </td>
+
+            <td>
+              {% if book.total_pages %}
+                {% comment %}
+                  The number is the content and the bar is decoration, so the
+                  bar is hidden from assistive technology rather than repeated
+                  to it. Design system: a bar never carries the meaning alone.
+                {% endcomment %}
+                <span class="progress" aria-hidden="true"><span class="progress__fill" style="width: {{ row.percent }}%"></span></span>
+                {{ row.percent }}%
+              {% else %}
+                <span class="empty">no page count recorded</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if current_member %}
+      <p><a href="{% url 'club:progress_update' %}">Record your own progress</a></p>
+    {% else %}
+      <p class="empty">
+        <a href="{% url 'club:identify' %}?next={{ request.get_full_path|urlencode }}">Say who you are</a>
+        to record your own progress.
+      </p>
+    {% endif %}
+  {% endif %}
+{% endblock %}

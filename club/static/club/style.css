@@ -314,3 +314,36 @@ button {
   font-size: 1.25rem;
   margin: 0 0 0.25rem;
 }
+
+/* Progress overview ------------------------------------------------------- */
+
+.progress-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+
+.progress-table th,
+.progress-table td {
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: baseline;
+}
+
+.progress-table thead th {
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+  font-weight: normal;
+}
+
+.progress-table tbody tr:nth-child(even) {
+  background: var(--panel);
+}
+
+/* Narrow enough to leave room for the number beside it, which is the part
+ * that actually carries the meaning. */
+.progress-table .progress {
+  width: 5rem;
+  margin-right: 0.4rem;
+}

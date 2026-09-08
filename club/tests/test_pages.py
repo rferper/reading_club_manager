@@ -42,7 +42,8 @@ class BaseTemplateTests(TestCase):
 
         self.assertContains(response, reverse("club:home"))
         self.assertContains(response, reverse("club:member_list"))
-        for absent in ("/progress/", "/questions/", "/history/"):
+        self.assertContains(response, reverse("club:progress"))
+        for absent in ("/questions/", "/history/"):
             self.assertNotContains(response, f'href="{absent}"')
 
     def test_messages_are_rendered(self):
