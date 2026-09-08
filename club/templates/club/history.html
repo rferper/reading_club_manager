@@ -1,0 +1,43 @@
+{% extends "club/base.html" %}
+
+{% block title %}History — Reading Club Manager{% endblock %}
+
+{% block content %}
+  <h1>History</h1>
+
+  {% if is_club_admin %}
+    <p>
+      <a class="admin-only" href="{% url 'club:book_start' %}">Start a book</a>
+    </p>
+  {% endif %}
+
+  {% for book in books %}
+    <div class="panel history-entry">
+      <p class="current-book__title">
+        <a href="{% url 'club:history_detail' book.pk %}">{{ book.title }}</a>
+      </p>
+
+      <p class="byline">
+        by {{ book.author }}
+        {% if book.started_on %}· {{ book.started_on }}{% endif %}
+        {% if book.finished_on %}
+          to {{ book.finished_on }}
+        {% else %}
+          · no finish date recorded
+        {% endif %}
+        {% if book.rating %}· rated {{ book.rating }} out of 5{% endif %}
+      </p>
+
+      {% if is_club_admin %}
+        <div class="admin-only question__controls">
+          <a href="{% url 'club:book_edit' book.pk %}">Edit</a>
+        </div>
+      {% endif %}
+    </div>
+  {% empty %}
+    <p class="empty">
+      The club has not finished a book yet — the archive fills up as books are
+      finished, and nothing ever leaves it.
+    </p>
+  {% endfor %}
+{% endblock %}

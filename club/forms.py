@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Member, Note, Progress, Question
+from .models import Book, Member, Note, Progress, Question
 
 
 class AdminPinForm(forms.Form):
@@ -171,3 +171,78 @@ class AnswerForm(forms.Form):
                 "required": "That question is not open for answers.",
             },
         )
+
+
+class BookForm(forms.ModelForm):
+    """Start a book. Admin-only.
+
+    `is_current` is absent: the view sets it, because starting a book is an
+    act with a rule attached (at most one) and not a checkbox. Decision #17
+    says the same about why no `save()` override guards it.
+    """
+
+    class Meta:
+        model = Book
+        fields = ("title", "author", "total_pages", "started_on")
+        labels = {
+            "title": "Title",
+            "author": "Author",
+            "total_pages": "Total pages",
+            "started_on": "Started on",
+        }
+        help_texts = {
+            "total_pages": "Optional. Without it, progress shows pages and no percentage.",
+        }
+        widgets = {"started_on": forms.DateInput(attrs={"type": "date"})}
+
+
+class BookEditForm(BookForm):
+    """Correct an archived book's metadata. Admin-only.
+
+    Adds the two fields that only mean anything once a book is finished. Still
+    no `is_current`: moving the flag is `book_start` and `book_finish`, which
+    is where the rule about there being one of them lives.
+    """
+
+    class Meta(BookForm.Meta):
+        fields = BookForm.Meta.fields + ("finished_on", "rating")
+        labels = {
+            **BookForm.Meta.labels,
+            "finished_on": "Finished on",
+            "rating": "Rating",
+        }
+        widgets = {
+            **BookForm.Meta.widgets,
+            "finished_on": forms.DateInput(attrs={"type": "date"}),
+            "rating": forms.NumberInput(attrs={"min": 1, "max": 5}),
+        }
+
+
+class BookFinishForm(forms.ModelForm):
+    """Close a book: the date the club finished it, and what they made of it.
+
+    One rating for the club, recorded here — decision #9. A per-member rating
+    is #16.
+    """
+
+    class Meta:
+        model = Book
+        fields = ("finished_on", "rating")
+        labels = {"finished_on": "Finished on", "rating": "Rating"}
+        help_texts = {"rating": "Optional. 1 to 5, as the club agreed it."}
+        widgets = {
+            "finished_on": forms.DateInput(attrs={"type": "date"}),
+            # The model's validators already refuse anything outside 1-5. These
+            # put the same bounds on the spinner, so the browser stops it
+            # before the round trip does.
+            "rating": forms.NumberInput(attrs={"min": 1, "max": 5}),
+        }
+        error_messages = {
+            "finished_on": {"required": "A finished book needs the date it was finished."}
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Nullable on the model, because a book being read has no finish date.
+        # Required here, because this form is the moment it gets one.
+        self.fields["finished_on"].required = True

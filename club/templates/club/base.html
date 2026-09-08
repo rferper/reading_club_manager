@@ -46,14 +46,13 @@
           <li><a href="{% url 'club:progress' %}">Progress</a></li>
           <li><a href="{% url 'club:notes' %}">Notes</a></li>
           <li><a href="{% url 'club:questions' %}">Questions</a></li>
+          <li><a href="{% url 'club:history' %}">History</a></li>
 
           {% comment %}
-            History (#14) adds its own entry here,
-            in the same change that adds their route. Do not add a link before
-            its route exists: a {% url %} tag
-            against a missing route raises NoReverseMatch, and because every
-            page extends this template that breaks the whole site rather than
-            one page.
+            Every route in `_docs/api.md` now has its entry. Do not add a link
+            before its route exists: a {% url %} tag against a missing route
+            raises NoReverseMatch, and because every page extends this template
+            that breaks the whole site rather than one page.
           {% endcomment %}
         </ul>
       </div>

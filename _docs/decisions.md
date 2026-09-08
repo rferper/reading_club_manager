@@ -471,3 +471,48 @@ are not identical to the microsecond.
 
 Why: without the tolerance every answer would claim to have been edited the
 moment it was written, which is worse than not saying at all.
+
+## 22. The archive lists everything that is not current, and `history_detail` accepts the current book
+
+Settled while building the archive (#14).
+
+**`/history/` filters on `is_current=False`, not on `finished_on__isnull=False`.**
+
+Why: the two differ only for a book with no finish date recorded — entered
+through the admin, or started and set aside. Filtering on the finish date would
+make that book invisible everywhere: not on the landing page, not in the
+archive, findable only through `/admin/`. Listing it with "no finish date
+recorded" is the empty state the design system asks for, and it is also the
+prompt that gets the date filled in. `Book.Meta.ordering` already places those
+rows last (decision #17).
+
+**`/history/<pk>/` renders the current book too**, marked as still open with
+links to the live notes and questions, rather than 404ing.
+
+Why: it is the same read-only replay of the same rows, and the flag is the only
+difference. A 404 would mean a link to a book's discussion breaks the moment
+somebody starts reading it again, which #21 is going to make possible.
+
+**Finishing is a form on the book, not a button.** `book_finish` takes a date
+defaulting to today and an optional rating, and `finished_on` is required there
+although the model allows null.
+
+Why: null is right on the model — a book being read has no finish date — and
+wrong at this moment, which is precisely the moment it acquires one. The rating
+stays optional: decision #9 makes it one club-level number, and a club that
+cannot agree on one should not be blocked from closing the book.
+
+**`book_start` pre-checks for a current read and also catches `IntegrityError`.**
+
+Why: the pre-check gives the readable sentence #14 asks for. It is not a lock,
+though, and the constraint from decision #2 is real, so the far-fetched case of
+two admins starting a book at once still has to be a form error rather than a
+debug page.
+
+**Deleting a note stays possible on a finished book.** The archive page offers
+no such button, but `note_delete` does not check whether the book is closed.
+
+Why: decision #7 gives an author the ability to remove a regretted note, and
+that is the whole reason posting one feels safe. Making it expire when the club
+moves on would take it away exactly when the note becomes permanent. Posting is
+what the archive refuses; removing your own words is not posting.
