@@ -1,0 +1,24 @@
+{% extends "club/base.html" %}
+
+{% block title %}Remove a question — Reading Club Manager{% endblock %}
+
+{% block content %}
+  <h1>Remove a question?</h1>
+
+  <div class="panel question">
+    <p class="question__text">{{ question.text|linebreaksbr }}</p>
+    <p class="byline">on {{ question.book.title }}</p>
+  </div>
+
+  <p class="empty">
+    Removing this question also removes every answer the club wrote to it.
+    That is other people's writing, and it does not come back.
+  </p>
+
+  <form class="admin-only" method="post">
+    {% csrf_token %}
+    <button type="submit">Remove the question and its answers</button>
+  </form>
+
+  <p><a href="{% url 'club:questions' %}">Keep it</a></p>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "club/base.html" %}
+
+{% block title %}Questions — Reading Club Manager{% endblock %}
+
+{% block content %}
+  <h1>Questions</h1>
+
+  {% if not book %}
+    <p class="empty">
+      No book in progress — an admin can start one. Questions belong to a book,
+      so there is nothing to ask about yet.
+    </p>
+  {% else %}
+    <p class="byline">on {{ book.title }} by {{ book.author }}</p>
+
+    {% if is_club_admin %}
+      <p>
+        <a class="admin-only" href="{% url 'club:question_add' %}">Add a question</a>
+      </p>
+    {% endif %}
+
+    {% for question in questions %}
+      <div class="panel question">
+        <p class="question__text">{{ question.text|linebreaksbr }}</p>
+
+        {% if is_club_admin %}
+          <div class="admin-only question__controls">
+            <a href="{% url 'club:question_edit' question.pk %}">Edit</a>
+            <a href="{% url 'club:question_delete' question.pk %}">Remove</a>
+          </div>
+        {% endif %}
+      </div>
+    {% empty %}
+      <p class="empty">
+        No questions on {{ book.title }} yet — an admin can post the first one.
+      </p>
+    {% endfor %}
+  {% endif %}
+{% endblock %}

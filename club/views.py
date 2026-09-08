@@ -4,6 +4,7 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
+from django.db import models
 from django.db.models import F, OuterRef, Subquery
 from django.db.models.functions import Lower
 from django.shortcuts import get_object_or_404, redirect, render
@@ -18,9 +19,10 @@ from .forms import (
     MemberForm,
     NoteForm,
     ProgressForm,
+    QuestionForm,
 )
 from .identity import current_member, forget_member, remember_member
-from .models import Book, Member, Note, Progress
+from .models import Book, Member, Note, Progress, Question
 
 
 def home(request):
@@ -404,3 +406,91 @@ def note_delete(request, pk):
     note.delete()
     messages.success(request, "Note removed.")
     return redirect("club:notes")
+
+
+def questions(request):
+    """The current book's discussion questions, in the admin's order.
+
+    Readable by anyone. #13 adds the answers and the form to submit one.
+    """
+    book = Book.objects.current()
+
+    return render(
+        request,
+        "club/questions.html",
+        {"book": book, "questions": book.questions.all() if book else []},
+    )
+
+
+@club_admin_required
+def question_add(request):
+    """Post a discussion question against the current book."""
+    book = Book.objects.current()
+
+    if book is None:
+        messages.error(request, "There is no current book to ask about.")
+        return redirect("club:home")
+
+    last = book.questions.aggregate(models.Max("position"))["position__max"] or 0
+    form = QuestionForm(request.POST or None, initial={"position": last + 1})
+
+    if request.method == "POST" and form.is_valid():
+        question = form.save(commit=False)
+        question.book = book
+        question.save()
+        messages.success(request, "Question posted.")
+        return redirect("club:questions")
+
+    return render(
+        request,
+        "club/question_form.html",
+        {
+            "form": form,
+            "book": book,
+            "heading": "Add a question",
+            "submit_label": "Post question",
+        },
+    )
+
+
+@club_admin_required
+def question_edit(request, pk):
+    """Reword a question, or move it in the sequence."""
+    question = get_object_or_404(Question, pk=pk)
+    form = QuestionForm(request.POST or None, instance=question)
+
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Question updated.")
+        return redirect("club:questions")
+
+    return render(
+        request,
+        "club/question_form.html",
+        {
+            "form": form,
+            "book": question.book,
+            "question": question,
+            "heading": "Edit a question",
+            "submit_label": "Save changes",
+        },
+    )
+
+
+@club_admin_required
+def question_delete(request, pk):
+    """Remove a question, and every answer to it.
+
+    GET renders the confirmation — the one thing a GET may do here — and the
+    removal happens on POST. The confirmation says what goes with it, because
+    the answers are other people's writing and the admin cannot see them from
+    the button.
+    """
+    question = get_object_or_404(Question, pk=pk)
+
+    if request.method == "POST":
+        question.delete()
+        messages.success(request, "Question removed, along with its answers.")
+        return redirect("club:questions")
+
+    return render(request, "club/question_confirm_delete.html", {"question": question})
