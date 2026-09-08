@@ -55,3 +55,9 @@ questions open. When you hit one:
 Do not expand scope to resolve an ambiguity. The plan's "Out of Scope" list is
 binding: book voting, meeting scheduling, self-registration, and real
 authentication stay out of v1 regardless of how convenient they would be.
+
+## Roles
+
+- PM - grooms a task before anyone implements it, follows _docs/_team/pm.md
+- Engineer - implements one groomed task, follows _docs/_team/software-engineer.md
+- QA - checks the result against the acceptance criteria, follows _docs/_team/qa-engineer.md
