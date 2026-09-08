@@ -187,3 +187,52 @@ form-level one, so the roster form in #5 shows a form error rather than a 500.
 Cost accepted: case folding is all the normalisation there is. "José" and "Jose"
 are two members, and so are names differing by an internal double space. Django's
 form fields already strip surrounding whitespace, which covers the common typo.
+
+## 14. What the admin PIN gate does when it refuses
+
+Settled while building the PIN gate (#4). Four calls, all about the gate rather
+than the PIN itself — decision #5 already settled that the PIN is not security.
+
+**A blank PIN fails closed.** `CLUB_ADMIN_PIN` is
+`os.environ.get("CLUB_ADMIN_PIN", "0000").strip()`. When it resolves to `""` the
+PIN page says admin mode is unavailable, the comparison is never reached, and no
+submitted value — the empty string included — sets the flag.
+
+Why: `CLUB_ADMIN_PIN=` in the environment yields `""`, not the `0000` default,
+so a deployment that meant to unset the PIN would otherwise hand admin mode to
+anyone who submitted an empty field. Unreachable is the safe reading of "no PIN
+configured"; open to everyone is not.
+
+**Refusal splits on method: 302 on GET or HEAD, 403 on everything else.** The
+`club_admin_required` decorator redirects a safe method to `/admin-pin/` with
+`?next=` back to where it came from, and raises `PermissionDenied` for anything
+else.
+
+Why: a redirect answers a POST with a GET and silently drops the payload. The
+typed data is lost either way, but a 403 says a refusal happened, where an
+automated POST would read a 302 as success. On a GET the redirect is genuinely
+the missing step, so it is the more useful answer there.
+
+**A submitted `next` is validated before it is followed.**
+`url_has_allowed_host_and_scheme` against `request.get_host()`, plus a rejection
+of `/admin-pin/` and `/admin-pin/exit/` as destinations, falling back to
+`club:home`.
+
+Why: `next` is client data reaching a `Location` header. The host check keeps a
+hand-edited link from bouncing a member off-site after they type the PIN; the
+self-reference check keeps a bookmarked `?next=/admin-pin/` from looping the PIN
+page onto itself or walking straight back out through the exit route.
+
+**Admin mode lasts exactly as long as the session cookie.** No session settings
+are changed: Django's default two weeks, surviving a browser restart, not
+sliding on activity. It ends deliberately at `/admin-pin/exit/`.
+
+Why: `SESSION_EXPIRE_AT_BROWSER_CLOSE` is not available, because `member_id`
+(#6) shares the same cookie and wants the longer life. An expiry belonging to
+admin mode alone is #24, deliberately deferred — decision #5 says hardening a
+shared PIN invites the mistake of trusting it.
+
+Consequence accepted: logging out of Django's own `/admin/` also drops admin
+mode, because `django.contrib.auth.logout()` flushes the whole session. There is
+a test named after it so the next person meets it in a test report rather than
+in the browser.

@@ -18,10 +18,19 @@
             SLOT: identity indicator. Issue #6 fills this with
             "You are: Ada — switch", or an invitation when nobody has
             identified themselves yet.
-
-            SLOT: admin-mode indicator. Issue #4 fills this when the PIN flag
-            is set in the session.
           {% endcomment %}
+
+          {% if is_club_admin %}
+            <div class="admin-mode admin-only">
+              <span>Admin mode</span>
+              <form method="post" action="{% url 'club:admin_exit' %}">
+                {% csrf_token %}
+                <button type="submit">Leave admin mode</button>
+              </form>
+            </div>
+          {% else %}
+            <a class="admin-only" href="{% url 'club:admin_pin' %}">Enter admin mode</a>
+          {% endif %}
         </div>
       </div>
     </header>

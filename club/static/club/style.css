@@ -253,3 +253,16 @@ button {
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--rule);
 }
+
+/* The admin-mode indicator in the header: the label and the form that leaves
+ * admin mode, which is a POST because it changes state. */
+.admin-mode {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.admin-mode button {
+  padding: 0.1rem 0.5rem;
+  font-size: 0.9rem;
+}
