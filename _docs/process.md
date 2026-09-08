@@ -72,15 +72,21 @@ and QA as subagents. It does not groom, implement or test itself.
 
 1. Pick the next open issue from the backlog
 2. PM grooms it
-3. Engineer implements it
-4. QA verifies it
-5. On FAIL, back to step 3 with the QA comment as input
-6. On PASS, close the issue
-7. Repeat until the backlog is empty
+3. Orchestrator cuts the branch, `<number>-<slug>`, from an up-to-date `master`
+4. Engineer implements it on that branch
+5. QA verifies it on that branch
+6. On FAIL, back to step 4 with the QA comment as input
+7. On PASS, the orchestrator merges the branch into `master`, pushes, and
+   closes the issue
+8. Repeat until the backlog is empty
+
+Issues #1, #2 and #3 predate this and were committed straight to `master`.
 
 ## Rules
 
 - Do not skip step 2
 - The engineer does not close the issue
 - QA does not fix the code, only outputs PASS or FAIL
+- Only the orchestrator merges and pushes. The engineer commits to the branch
+  and stops there, so that what QA reads is exactly what it verified
 - The orchestrator closes the issue only after QA outputs PASS
