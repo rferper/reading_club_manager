@@ -1,0 +1,304 @@
+[
+{
+  "model": "club.member",
+  "pk": 1,
+  "fields": {
+    "name": "Ada Kwan",
+    "role": "Founder",
+    "is_active": true,
+    "joined_on": "2023-02-11"
+  }
+},
+{
+  "model": "club.member",
+  "pk": 2,
+  "fields": {
+    "name": "Bo Ferris",
+    "role": "Host",
+    "is_active": true,
+    "joined_on": "2023-02-11"
+  }
+},
+{
+  "model": "club.member",
+  "pk": 3,
+  "fields": {
+    "name": "Cleo Nkemelu",
+    "role": "Snack coordinator",
+    "is_active": true,
+    "joined_on": "2024-09-03"
+  }
+},
+{
+  "model": "club.member",
+  "pk": 4,
+  "fields": {
+    "name": "Dev Rao",
+    "role": "",
+    "is_active": true,
+    "joined_on": "2026-05-20"
+  }
+},
+{
+  "model": "club.member",
+  "pk": 5,
+  "fields": {
+    "name": "Zoe Marsh",
+    "role": "Founder",
+    "is_active": false,
+    "joined_on": "2023-02-11"
+  }
+},
+{
+  "model": "club.book",
+  "pk": 1,
+  "fields": {
+    "title": "Piranesi",
+    "author": "Susanna Clarke",
+    "total_pages": 245,
+    "started_on": "2026-05-04",
+    "finished_on": "2026-06-22",
+    "rating": 5,
+    "is_current": false
+  }
+},
+{
+  "model": "club.book",
+  "pk": 2,
+  "fields": {
+    "title": "Middlemarch",
+    "author": "George Eliot",
+    "total_pages": 880,
+    "started_on": "2026-07-06",
+    "finished_on": null,
+    "rating": null,
+    "is_current": true
+  }
+},
+{
+  "model": "club.progress",
+  "pk": 1,
+  "fields": {
+    "book": 1,
+    "member": 1,
+    "pages_read": 245,
+    "updated_on": "2026-09-08T20:09:05.015Z"
+  }
+},
+{
+  "model": "club.progress",
+  "pk": 2,
+  "fields": {
+    "book": 1,
+    "member": 2,
+    "pages_read": 245,
+    "updated_on": "2026-09-08T20:09:05.021Z"
+  }
+},
+{
+  "model": "club.progress",
+  "pk": 3,
+  "fields": {
+    "book": 1,
+    "member": 3,
+    "pages_read": 245,
+    "updated_on": "2026-09-08T20:09:05.027Z"
+  }
+},
+{
+  "model": "club.progress",
+  "pk": 4,
+  "fields": {
+    "book": 1,
+    "member": 5,
+    "pages_read": 198,
+    "updated_on": "2026-09-08T20:09:05.032Z"
+  }
+},
+{
+  "model": "club.progress",
+  "pk": 5,
+  "fields": {
+    "book": 2,
+    "member": 1,
+    "pages_read": 604,
+    "updated_on": "2026-09-08T20:09:05.124Z"
+  }
+},
+{
+  "model": "club.progress",
+  "pk": 6,
+  "fields": {
+    "book": 2,
+    "member": 2,
+    "pages_read": 431,
+    "updated_on": "2026-09-08T20:09:05.130Z"
+  }
+},
+{
+  "model": "club.progress",
+  "pk": 7,
+  "fields": {
+    "book": 2,
+    "member": 3,
+    "pages_read": 0,
+    "updated_on": "2026-09-08T20:09:05.136Z"
+  }
+},
+{
+  "model": "club.note",
+  "pk": 1,
+  "fields": {
+    "book": 1,
+    "author": 5,
+    "body": "The Halls are doing something I have never seen a setting do. They are not a backdrop for the plot. They are the plot, patiently.",
+    "created_on": "2026-05-19T19:00:00Z"
+  }
+},
+{
+  "model": "club.note",
+  "pk": 2,
+  "fields": {
+    "book": 1,
+    "author": 1,
+    "body": "Read the journal entries out loud and the dating scheme stops being a gimmick.\n\nThe Year the Albatross Came to the South-Western Halls. Try saying that without hearing somebody who is happy.",
+    "created_on": "2026-06-02T19:00:00Z"
+  }
+},
+{
+  "model": "club.note",
+  "pk": 3,
+  "fields": {
+    "book": 2,
+    "author": 2,
+    "body": "Two hundred pages in and I have decided Casaubon is not a villain, he is a man who has run out of road and knows it.",
+    "created_on": "2026-07-21T19:00:00Z"
+  }
+},
+{
+  "model": "club.note",
+  "pk": 4,
+  "fields": {
+    "book": 2,
+    "author": 1,
+    "body": "Chapter 20 is the whole novel in eight pages.\n\n\"We are all of us born in moral stupidity, taking the world as an udder to feed our supreme selves.\" Nobody warned me.",
+    "created_on": "2026-08-03T19:00:00Z"
+  }
+},
+{
+  "model": "club.note",
+  "pk": 5,
+  "fields": {
+    "book": 2,
+    "author": 3,
+    "body": "Starting tonight. Please nobody say anything about Lydgate.",
+    "created_on": "2026-09-01T19:00:00Z"
+  }
+},
+{
+  "model": "club.question",
+  "pk": 1,
+  "fields": {
+    "book": 1,
+    "text": "Is Piranesi's amnesia a loss or a gift? The book seems to want both.",
+    "position": 1,
+    "created_on": "2026-06-20T18:00:00Z"
+  }
+},
+{
+  "model": "club.question",
+  "pk": 2,
+  "fields": {
+    "book": 1,
+    "text": "Would you have gone back to the Halls at the end?",
+    "position": 2,
+    "created_on": "2026-06-20T18:05:00Z"
+  }
+},
+{
+  "model": "club.question",
+  "pk": 3,
+  "fields": {
+    "book": 2,
+    "text": "Dorothea wants to be useful. Does the novel think she manages it?",
+    "position": 1,
+    "created_on": "2026-08-15T18:00:00Z"
+  }
+},
+{
+  "model": "club.question",
+  "pk": 4,
+  "fields": {
+    "book": 2,
+    "text": "Whose marriage did you find harder to read about, and why?",
+    "position": 2,
+    "created_on": "2026-08-15T18:10:00Z"
+  }
+},
+{
+  "model": "club.answer",
+  "pk": 1,
+  "fields": {
+    "question": 1,
+    "member": 5,
+    "body": "A gift he did not consent to, which is the part that unsettles me. He is happier than any of us and it was done to him.",
+    "created_on": "2026-06-21T20:00:00Z",
+    "updated_on": "2026-06-21T20:00:00Z"
+  }
+},
+{
+  "model": "club.answer",
+  "pk": 2,
+  "fields": {
+    "question": 1,
+    "member": 1,
+    "body": "A loss. The kindness of the Halls is real and it is still a cage.",
+    "created_on": "2026-06-21T21:00:00Z",
+    "updated_on": "2026-06-22T09:00:00Z"
+  }
+},
+{
+  "model": "club.answer",
+  "pk": 3,
+  "fields": {
+    "question": 2,
+    "member": 2,
+    "body": "Every winter, yes. Not in June.",
+    "created_on": "2026-06-22T11:00:00Z",
+    "updated_on": "2026-06-22T11:00:00Z"
+  }
+},
+{
+  "model": "club.answer",
+  "pk": 4,
+  "fields": {
+    "question": 3,
+    "member": 1,
+    "body": "Not in the way she meant, and the last paragraph argues that is the point. Unhistoric acts, growing good of the world, and so on.",
+    "created_on": "2026-08-16T20:00:00Z",
+    "updated_on": "2026-08-16T20:00:00Z"
+  }
+},
+{
+  "model": "club.answer",
+  "pk": 5,
+  "fields": {
+    "question": 3,
+    "member": 2,
+    "body": "She manages it for exactly one person and the book calls that enough.",
+    "created_on": "2026-08-17T08:00:00Z",
+    "updated_on": "2026-08-17T08:00:00Z"
+  }
+},
+{
+  "model": "club.answer",
+  "pk": 6,
+  "fields": {
+    "question": 4,
+    "member": 1,
+    "body": "Lydgate and Rosamond. Two people being reasonable at each other for years.",
+    "created_on": "2026-08-18T21:00:00Z",
+    "updated_on": "2026-08-18T21:00:00Z"
+  }
+}
+]
