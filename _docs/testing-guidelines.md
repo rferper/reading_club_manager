@@ -16,6 +16,7 @@ is a new module and nothing else. What is there now:
 | `test_identity.py` | session identity and the member gate |
 | `test_books.py` | the `Book` model and the current-read flag |
 | `test_progress.py` | the `Progress` model, its derived percentage, the update form |
+| `test_progress_overview.py` | the group table, its ordering, its query count |
 
 Put a test in the module that owns the rule it protects, not the module that
 owns the URL it happens to hit. Imports inside the package are relative to it:

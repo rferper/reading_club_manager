@@ -110,6 +110,27 @@ class Book(models.Model):
     def __str__(self):
         return f"{self.title} by {self.author}"
 
+    def percent_of(self, pages_read):
+        """Whole percent of this book that ``pages_read`` covers, or ``None``.
+
+        The one place the rule from decision #1 lives, because two pages read
+        the same book: `Progress.percent` for a stored row, and the overview
+        (#10), which annotates members with a page count and has no `Progress`
+        instance to ask.
+
+        ``None`` when the book has no page count — or a page count of zero,
+        which is a typo rather than a book. The club sees raw pages then, which
+        decision #1 accepts as a data-entry problem rather than a modelling one.
+
+        Capped at 100: pages read can legitimately exceed the total after an
+        admin corrects a page count downwards, and this number is a CSS bar
+        width. A bar past its own track is a rendering bug, not information.
+        """
+        if not self.total_pages:
+            return None
+
+        return min(100, round(100 * pages_read / self.total_pages))
+
 
 class Progress(models.Model):
     """How far one member has read one book.
@@ -153,16 +174,8 @@ class Progress(models.Model):
     def percent(self):
         """Whole percent of the book read, or ``None`` with no page count.
 
-        Derived on every read, never stored — decision #1. A book with no
-        ``total_pages`` recorded shows raw pages instead of a percentage, which
-        decision #1 accepts as a data-entry problem rather than a modelling one;
-        returning ``None`` is how the templates know to do that.
-
-        Capped at 100. Pages read can legitimately exceed the total after an
-        admin corrects a page count downwards, and a bar past its own track is
-        a rendering bug rather than information.
+        Derived on every read, never stored — decision #1. The arithmetic lives
+        on `Book`, so this row and the overview's annotated members cannot
+        disagree about what half of the same book is.
         """
-        if not self.book.total_pages:
-            return None
-
-        return min(100, round(100 * self.pages_read / self.book.total_pages))
+        return self.book.percent_of(self.pages_read)

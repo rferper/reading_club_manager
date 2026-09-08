@@ -3,6 +3,8 @@ from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.contrib import messages
+from django.db.models import F, OuterRef, Subquery
+from django.db.models.functions import Lower
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -271,4 +273,48 @@ def progress_update(request):
         request,
         "club/progress_form.html",
         {"form": form, "book": book, "progress": progress},
+    )
+
+
+def progress_overview(request):
+    """Who is ahead and who is behind on the current book.
+
+    One query for the roster, whatever its size: each active member is
+    annotated with their own `pages_read` through a subquery rather than
+    walking `member.progress` per row. `assertNumQueries` pins that.
+
+    A member with nothing recorded is annotated `None`, which is not the same
+    as a recorded zero — the page says "not started" for one and "0 pages" for
+    the other — but both sort to the bottom and neither is left out.
+    """
+    book = Book.objects.current()
+    rows = []
+
+    if book is not None:
+        members = (
+            Member.objects.filter(is_active=True)
+            .annotate(
+                recorded_pages=Subquery(
+                    Progress.objects.filter(
+                        member=OuterRef("pk"), book=book
+                    ).values("pages_read")[:1]
+                )
+            )
+            .order_by(F("recorded_pages").desc(nulls_last=True), Lower("name"))
+        )
+
+        rows = [
+            {
+                "member": member,
+                "pages_read": member.recorded_pages or 0,
+                "percent": book.percent_of(member.recorded_pages or 0),
+                "has_recorded": member.recorded_pages is not None,
+            }
+            for member in members
+        ]
+
+    return render(
+        request,
+        "club/progress.html",
+        {"book": book, "rows": rows},
     )

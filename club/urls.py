@@ -14,5 +14,6 @@ urlpatterns = [
     path("members/add/", views.member_add, name="member_add"),
     path("members/<int:pk>/edit/", views.member_edit, name="member_edit"),
     path("members/<int:pk>/toggle/", views.member_toggle, name="member_toggle"),
+    path("progress/", views.progress_overview, name="progress"),
     path("progress/update/", views.progress_update, name="progress_update"),
 ]
