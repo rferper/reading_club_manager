@@ -124,15 +124,35 @@ Removing it properly means editing the build configuration mid-project to delete
 something that costs nothing — a real chance of breaking the environment for no
 functional gain.
 
-## 12. Django's test runner, not pytest — open to revisit
+## 12. Django's test runner, not pytest
 
-Tests run with `manage.py test`. `pytest` is not installed.
+Tests run with `manage.py test`. `pytest` is not installed and will not be
+added for v1.
 
-Why: it is what ships with Django, it needs no dependencies, and it handles the
-test database without configuration. `pytest` plus `pytest-django` would be
-better ergonomics — fixtures, parametrisation, better failure output — at the
-cost of two dependencies and a settings shim.
+Why, in the order that decided it:
 
-This is the one decision here recorded as genuinely open. It is cheap to change
-while the suite is small and gets more expensive with every test written. If it
-is going to change, change it early.
+**The assertions this app needs are `TestCase` methods.** The remaining issues
+lean on `assertRedirects` (every POST-then-redirect), `assertContains` (every
+smoke test), `assertFormError` (duplicate member names, empty note bodies) and
+`assertNumQueries` (the progress overview's N+1 risk). Under pytest you either
+keep writing `TestCase` classes and gain nothing, or you trade those helpers for
+fixtures and lose more than you win.
+
+**Pytest's headline advantage does not apply at this size.** Assertion
+introspection pays off on complex comparisons; this suite mostly asserts a
+status code and the presence of a string. `parametrize` would genuinely help
+with the percentage boundaries in #9 — the one real loss — and `subTest` covers
+that case adequately.
+
+**Cost is two dependencies, a settings shim, and a second idiom.** In a project
+whose point is learning Django, every doc page and answer you will hit uses
+`TestCase` and `manage.py test`. Running a second testing model alongside that
+is cost without a matching benefit.
+
+Not urgent to revisit, which is itself part of the argument: `pytest-django`
+runs existing Django `TestCase` classes unchanged, so adopting it later means
+adding two dependencies and a config block, not rewriting tests. There is no
+deadline here and no reason to spend the dependencies in advance of the need.
+
+Revisit if CI arrives and its reporting is wanted, or if the suite passes
+roughly 50 tests and setup duplication starts to hurt.

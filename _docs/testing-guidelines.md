@@ -13,8 +13,9 @@ Each run builds a throwaway database and destroys it afterwards, so tests never
 touch `db.sqlite3` and never depend on what is in it.
 
 `pytest` is **not** installed, and there is no top-level `tests/` directory.
-Adding `pytest` plus `pytest-django` would be two new dependencies, which under
-the rule in `AGENTS.md` needs a decision first — see `_docs/decisions.md` #12.
+That is settled, not an omission — see `_docs/decisions.md` #12. Do not add it.
+Lean on the `TestCase` assertion helpers instead; they are the reason for the
+decision.
 
 ## What to test
 
