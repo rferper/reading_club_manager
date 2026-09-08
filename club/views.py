@@ -3,13 +3,14 @@ from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.contrib import messages
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from .decorators import club_admin_required
-from .forms import AdminPinForm
+from .forms import AdminPinForm, MemberForm
+from .models import Member
 
 
 def home(request):
@@ -99,3 +100,81 @@ def admin_exit(request):
     request.session.pop("is_club_admin", None)
     messages.success(request, "Admin mode is off.")
     return redirect("club:home")
+
+
+def member_list(request):
+    """The roster, readable by anyone.
+
+    Deactivated members stay on this page and stay marked (decision #3): they
+    left the club, not the record.
+    """
+    return render(
+        request,
+        "club/member_list.html",
+        {"members": Member.objects.all()},
+    )
+
+
+@club_admin_required
+def member_add(request):
+    """Put someone new on the roster."""
+    form = MemberForm(request.POST or None)
+
+    if request.method == "POST" and form.is_valid():
+        member = form.save()
+        messages.success(request, f"{member.name} is on the roster.")
+        return redirect("club:member_list")
+
+    return render(
+        request,
+        "club/member_form.html",
+        {
+            "form": form,
+            "heading": "Add a member",
+            "submit_label": "Add member",
+        },
+    )
+
+
+@club_admin_required
+def member_edit(request, pk):
+    """Rename a member, or change the label their role is."""
+    member = get_object_or_404(Member, pk=pk)
+    form = MemberForm(request.POST or None, instance=member)
+
+    if request.method == "POST" and form.is_valid():
+        member = form.save()
+        messages.success(request, f"{member.name} is updated.")
+        return redirect("club:member_list")
+
+    return render(
+        request,
+        "club/member_form.html",
+        {
+            "form": form,
+            "member": member,
+            "heading": f"Edit {member.name}",
+            "submit_label": "Save changes",
+        },
+    )
+
+
+@require_POST
+@club_admin_required
+def member_toggle(request, pk):
+    """Deactivate a member, or bring them back.
+
+    There is no delete, now or later — decision #3. `require_POST` is outermost
+    so a GET is a 405 whatever the session holds, and nothing that changes the
+    roster can hide behind a link.
+    """
+    member = get_object_or_404(Member, pk=pk)
+    member.is_active = not member.is_active
+    member.save(update_fields=["is_active"])
+
+    if member.is_active:
+        messages.success(request, f"{member.name} is reading with the club again.")
+    else:
+        messages.success(request, f"{member.name} is no longer on the active roster.")
+
+    return redirect("club:member_list")

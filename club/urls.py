@@ -8,4 +8,8 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("admin-pin/", views.admin_pin, name="admin_pin"),
     path("admin-pin/exit/", views.admin_exit, name="admin_exit"),
+    path("members/", views.member_list, name="member_list"),
+    path("members/add/", views.member_add, name="member_add"),
+    path("members/<int:pk>/edit/", views.member_edit, name="member_edit"),
+    path("members/<int:pk>/toggle/", views.member_toggle, name="member_toggle"),
 ]

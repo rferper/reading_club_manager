@@ -39,11 +39,12 @@
       <div class="wrap">
         <ul class="site-nav__list">
           <li><a href="{% url 'club:home' %}">Home</a></li>
+          <li><a href="{% url 'club:member_list' %}">Members</a></li>
 
           {% comment %}
-            Members (#5), Progress (#10), Discussion (#12) and History (#14)
-            each add their own entry here, in the same change that adds their
-            route. Do not add a link before its route exists: a {% url %} tag
+            Progress (#10), Discussion (#12) and History (#14) each add their
+            own entry here, in the same change that adds their route. Do not
+            add a link before its route exists: a {% url %} tag
             against a missing route raises NoReverseMatch, and because every
             page extends this template that breaks the whole site rather than
             one page.
