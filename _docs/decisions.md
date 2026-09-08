@@ -236,3 +236,25 @@ Consequence accepted: logging out of Django's own `/admin/` also drops admin
 mode, because `django.contrib.auth.logout()` flushes the whole session. There is
 a test named after it so the next person meets it in a test report rather than
 in the browser.
+
+## 15. The roster form carries `joined_on`, and never `is_active`
+
+Settled while building the roster page (#5). Two small calls about which fields
+`MemberForm` exposes.
+
+**`joined_on` is on the form.** The issue names name and role; the form has all
+three.
+
+Why: the goal of #5 is a roster the club maintains without anyone holding a
+Django superuser account, and decision #13 kept `joined_on` editable precisely
+because founding members joined long before this app existed. A form without it
+would leave the club's own page unable to record a date the Django admin can,
+which is the gap this issue exists to close.
+
+**`is_active` is not on the form.** Deactivating is a POST to
+`club:member_toggle` and nothing else.
+
+Why: it is a different act from renaming someone, and a checkbox tucked beside
+the name field is how a member gets dropped off the roster by an admin who meant
+to fix a typo. A separate button with its own confirmation-shaped wording keeps
+the two apart. There is still no delete, ever — decision #3.

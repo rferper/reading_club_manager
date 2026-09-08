@@ -266,3 +266,34 @@ button {
   padding: 0.1rem 0.5rem;
   font-size: 0.9rem;
 }
+
+/* Roster ------------------------------------------------------------------ */
+
+.roster {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.roster__name {
+  margin: 0;
+}
+
+/* A word rather than a colour, so the marker survives a greyscale print and a
+ * screen reader. Deactivated members stay listed — decision #3. */
+.roster__inactive {
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.roster__controls {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.roster__controls button {
+  padding: 0.1rem 0.5rem;
+  font-size: 0.9rem;
+}

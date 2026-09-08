@@ -1,0 +1,23 @@
+{% extends "club/base.html" %}
+
+{% block title %}{{ heading }} — Reading Club Manager{% endblock %}
+
+{% block content %}
+  <h1>{{ heading }}</h1>
+
+  <form class="admin-only" method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">{{ submit_label }}</button>
+  </form>
+
+  <p><a href="{% url 'club:member_list' %}">Back to the members</a></p>
+
+  {% if member %}
+    <p class="empty">
+      Nobody is ever removed from the roster. To take {{ member.name }} off the
+      active list, deactivate them from the members page — everything they wrote
+      keeps their name.
+    </p>
+  {% endif %}
+{% endblock %}

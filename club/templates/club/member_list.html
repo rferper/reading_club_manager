@@ -1,0 +1,53 @@
+{% extends "club/base.html" %}
+
+{% block title %}Members — Reading Club Manager{% endblock %}
+
+{% block content %}
+  <h1>Members</h1>
+
+  {% if is_club_admin %}
+    <p>
+      <a class="admin-only" href="{% url 'club:member_add' %}">Add a member</a>
+    </p>
+  {% endif %}
+
+  {% if members %}
+    <ul class="roster">
+      {% for member in members %}
+        <li class="panel">
+          <p class="roster__name">
+            {{ member.name }}
+            {% if not member.is_active %}
+              {% comment %}
+                A word, not a colour: decision #3 keeps deactivated members
+                listed, so the marker has to read without seeing the styling.
+              {% endcomment %}
+              <span class="roster__inactive">— no longer reading with the club</span>
+            {% endif %}
+          </p>
+
+          <p class="byline">
+            {% if member.role %}{{ member.role }} · {% endif %}joined {{ member.joined_on }}
+          </p>
+
+          {% if is_club_admin %}
+            <div class="admin-only roster__controls">
+              <a href="{% url 'club:member_edit' member.pk %}">Edit</a>
+
+              <form method="post" action="{% url 'club:member_toggle' member.pk %}">
+                {% csrf_token %}
+                <button type="submit">
+                  {% if member.is_active %}Deactivate{% else %}Bring back{% endif %}
+                </button>
+              </form>
+            </div>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty">
+      Nobody is on the roster yet — an admin can add the first member.
+    </p>
+  {% endif %}
+{% endblock %}

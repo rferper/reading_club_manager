@@ -29,10 +29,10 @@ status to Built; add a row before inventing a route that is not here.
 | `/who-are-you/forget/` | `forget_me` | POST | Public | Clear the session identity | #6 | Planned |
 | `/admin-pin/` | `admin_pin` | GET, POST | Public | Enter the PIN; sets the admin session flag | #4 | Built |
 | `/admin-pin/exit/` | `admin_exit` | POST | Admin | Leave admin mode | #4 | Built |
-| `/members/` | `member_list` | GET | Public | The roster, with roles and active state | #5 | Planned |
-| `/members/add/` | `member_add` | GET, POST | Admin | Add a member | #5 | Planned |
-| `/members/<pk>/edit/` | `member_edit` | GET, POST | Admin | Rename a member or change their role | #5 | Planned |
-| `/members/<pk>/toggle/` | `member_toggle` | POST | Admin | Deactivate or reactivate a member | #5 | Planned |
+| `/members/` | `member_list` | GET | Public | The roster, with roles and active state | #5 | Built |
+| `/members/add/` | `member_add` | GET, POST | Admin | Add a member | #5 | Built |
+| `/members/<pk>/edit/` | `member_edit` | GET, POST | Admin | Rename a member or change their role | #5 | Built |
+| `/members/<pk>/toggle/` | `member_toggle` | POST | Admin | Deactivate or reactivate a member | #5 | Built |
 | `/progress/` | `progress` | GET | Public | Everyone's progress on the current book, furthest first | #10 | Planned |
 | `/progress/update/` | `progress_update` | POST | Member | Record your own pages read | #9 | Planned |
 | `/notes/` | `notes` | GET, POST | GET Public, POST Member | Notes newest-first, plus the add form | #11 | Planned |
