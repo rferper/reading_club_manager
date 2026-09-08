@@ -5,7 +5,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db import models
-from django.db.models import F, OuterRef, Subquery
+from django.db.models import F, OuterRef, Prefetch, Subquery
 from django.db.models.functions import Lower
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -15,6 +15,7 @@ from django.views.decorators.http import require_POST
 from .decorators import club_admin_required, require_member
 from .forms import (
     AdminPinForm,
+    AnswerForm,
     IdentityForm,
     MemberForm,
     NoteForm,
@@ -22,7 +23,7 @@ from .forms import (
     QuestionForm,
 )
 from .identity import current_member, forget_member, remember_member
-from .models import Book, Member, Note, Progress, Question
+from .models import Answer, Book, Member, Note, Progress, Question
 
 
 def home(request):
@@ -409,17 +410,84 @@ def note_delete(request, pk):
 
 
 def questions(request):
-    """The current book's discussion questions, in the admin's order.
+    """The current book's questions and everyone's answers to them.
 
-    Readable by anyone. #13 adds the answers and the form to submit one.
+    Reading is open to anyone. Answering needs a name, which is attribution and
+    not authorisation — decision #5.
+    """
+    if request.method == "POST":
+        return _post_answer(request)
+
+    return _render_questions(request)
+
+
+def _render_questions(request, bound_form=None):
+    """Render the page, optionally with one question's form showing errors.
+
+    Every question carries its own form. Exactly one of them can be bound —
+    the question just submitted — and the rest are fresh, prefilled with this
+    viewer's existing answer where there is one.
+    """
+    book = Book.objects.current()
+    viewer = current_member(request)
+
+    if book is None:
+        return render(request, "club/questions.html", {"book": None, "rows": []})
+
+    open_questions = book.questions.all()
+    bound_question = (
+        bound_form.data.get("question") if bound_form is not None else None
+    )
+
+    rows = []
+    for question in open_questions.prefetch_related(
+        Prefetch("answers", queryset=Answer.objects.select_related("member"))
+    ):
+        answers = list(question.answers.all())
+        mine = next((a for a in answers if a.member_id == getattr(viewer, "pk", None)), None)
+
+        if bound_form is not None and str(question.pk) == bound_question:
+            form = bound_form
+        else:
+            form = AnswerForm(
+                questions=open_questions,
+                initial={"question": question, "body": mine.body if mine else ""},
+            )
+
+        rows.append(
+            {"question": question, "answers": answers, "mine": mine, "form": form}
+        )
+
+    return render(request, "club/questions.html", {"book": book, "rows": rows})
+
+
+@require_member
+def _post_answer(request):
+    """Record this member's answer, replacing their previous one.
+
+    Not routed: `questions` dispatches here on POST. `update_or_create` is what
+    decision #6 asks for — one row per member per question, edited in place, so
+    changing your mind is an update rather than an integrity error.
     """
     book = Book.objects.current()
 
-    return render(
-        request,
-        "club/questions.html",
-        {"book": book, "questions": book.questions.all() if book else []},
+    if book is None:
+        messages.error(request, "There is no current book to discuss.")
+        return redirect("club:home")
+
+    form = AnswerForm(request.POST, questions=book.questions.all())
+
+    if not form.is_valid():
+        return _render_questions(request, bound_form=form)
+
+    Answer.objects.update_or_create(
+        question=form.cleaned_data["question"],
+        member=current_member(request),
+        defaults={"body": form.cleaned_data["body"]},
     )
+
+    messages.success(request, "Answer saved.")
+    return redirect("club:questions")
 
 
 @club_admin_required

@@ -141,3 +141,33 @@ class QuestionForm(forms.ModelForm):
         labels = {"text": "Question", "position": "Position"}
         widgets = {"text": forms.Textarea(attrs={"rows": 3})}
         error_messages = {"text": {"required": "A question needs something in it."}}
+
+
+class AnswerForm(forms.Form):
+    """Your answer to one of the current book's questions.
+
+    A plain `Form` rather than a `ModelForm`: the view writes through
+    `update_or_create` (decision #6), so there is no instance to bind and no
+    `save()` to call. The member is never a field — decision #4.
+
+    `question` is a hidden `ModelChoiceField` over the questions that are open
+    for answers, which is how a question on a finished book, a deleted one, or
+    a hand-typed id all arrive as one form error instead of three code paths.
+    """
+
+    body = forms.CharField(
+        label="Your answer",
+        widget=forms.Textarea(attrs={"rows": 3}),
+        error_messages={"required": "An answer needs something in it."},
+    )
+
+    def __init__(self, *args, questions, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["question"] = forms.ModelChoiceField(
+            queryset=questions,
+            widget=forms.HiddenInput,
+            error_messages={
+                "invalid_choice": "That question is not open for answers.",
+                "required": "That question is not open for answers.",
+            },
+        )

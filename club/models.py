@@ -249,3 +249,57 @@ class Question(models.Model):
     def __str__(self):
         return self.text
 
+
+
+class Answer(models.Model):
+    """One member's answer to one discussion question.
+
+    One row per member per question, enforced in the database (decision #6).
+    An answer is a standing position rather than a remark, so answering again
+    updates it in place — ten rows from one person on one question is noise,
+    and a uniqueness constraint without an update path is an integrity error
+    waiting for the first person who changes their mind.
+
+    Editable by its author, unlike a note (decision #7): refining a position on
+    a fixed question is the point of asking one.
+    """
+
+    question = models.ForeignKey(
+        Question, on_delete=models.CASCADE, related_name="answers"
+    )
+
+    # PROTECT for the same reason as `Note.author` — decision #20.
+    member = models.ForeignKey(
+        Member, on_delete=models.PROTECT, related_name="answers"
+    )
+
+    body = models.TextField()
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        # Oldest first: the order the conversation actually happened in, which
+        # is what a reader of the archive wants.
+        ordering = ["created_on", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["question", "member"],
+                name="one_answer_per_member_per_question",
+                violation_error_message=(
+                    "You have already answered this one — edit that answer instead."
+                ),
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.member} on {self.question.text[:40]}"
+
+    @property
+    def was_edited(self):
+        """Whether this answer has changed since it was first written.
+
+        Both timestamps are set on the first save, and `auto_now` has a coarser
+        resolution than the gap between two fields of one INSERT, so this asks
+        whether they differ by a real interval rather than at all.
+        """
+        return (self.updated_on - self.created_on).total_seconds() > 1

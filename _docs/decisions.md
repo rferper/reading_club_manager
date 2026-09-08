@@ -436,3 +436,38 @@ Why: #2 sketched a single Discussion link, before the two surfaces existed. They
 are different acts — a note is a reaction anyone posts, a question is a prompt
 only an admin posts — they live at different URLs, and a member looking for one
 should not have to guess which page a "Discussion" link lands on.
+
+## 21. One answer form per question, and the question id is a form field
+
+Settled while building answers (#13).
+
+**Every question on `/questions/` carries its own form, all posting to
+`/questions/`**, and the question is a hidden `ModelChoiceField` whose queryset
+is the current book's questions.
+
+Why: the alternative is a route per question, which is a URL for something that
+is not a resource. Making the question a form field rather than a hand-parsed
+`request.POST["question"]` means a deleted question, a question on a finished
+book, a missing id and a hand-typed `?question=abc` all arrive as the same form
+error instead of four code paths, one of which would have been a 500 on
+`int("abc")`. Answering a finished book's question is refused by that queryset
+and nothing else — which is the check #14 will reuse.
+
+On a failed submission only the offending question's form comes back bound. The
+rest are rebuilt fresh, so one mistake does not blank what the member typed
+under every other question.
+
+**`update_or_create`, not a `ModelForm` bound to an instance.** The form is a
+plain `Form` and the view writes through the manager.
+
+Why: decision #6 wants one row per member per question, edited in place. Asking
+for the existing row first and binding a `ModelForm` to it would work and would
+also be a lookup, a branch and a `save()` where `update_or_create` is one call
+that says what it does.
+
+**An answer shows "edited" only when the timestamps differ by more than a
+second.** `auto_now_add` and `auto_now` both fire on the first save, and they
+are not identical to the microsecond.
+
+Why: without the tolerance every answer would claim to have been edited the
+moment it was written, which is worse than not saying at all.
