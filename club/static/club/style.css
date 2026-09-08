@@ -1,0 +1,255 @@
+/* Reading Club Manager — the whole stylesheet.
+ *
+ * Hand-written, no framework, no build step. The tokens and components below
+ * are the ones named in _docs/design-system.md; add a colour there before you
+ * add one here. */
+
+:root {
+  --ink: #1e1c1a;
+  --ink-muted: #5c5751;
+  --paper: #fbf9f6;
+  --panel: #f2eee8;
+  --rule: #d8d1c7;
+  --accent: #7a4b2a;
+  --warn: #96331f;
+
+  --column: 46rem;
+}
+
+/* Layout ------------------------------------------------------------------ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+/* One centred column at every width. No breakpoints, because there is only
+ * ever one column to rearrange. */
+.wrap {
+  max-width: var(--column);
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+main.wrap {
+  padding-top: 1.5rem;
+  padding-bottom: 3rem;
+}
+
+/* Nothing overflows its column: long titles, URLs in notes, wide tables. */
+img,
+table {
+  max-width: 100%;
+}
+
+h1,
+h2,
+h3,
+p,
+li,
+td,
+th {
+  overflow-wrap: break-word;
+}
+
+h1,
+h2,
+h3 {
+  font-size: 1.25rem;
+  line-height: 1.3;
+  margin: 0 0 0.75rem;
+}
+
+a {
+  color: var(--accent);
+}
+
+/* Header and nav ---------------------------------------------------------- */
+
+.site-header {
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
+}
+
+.site-header__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+.site-title {
+  font-size: 1.25rem;
+  font-weight: bold;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+/* Holds the identity indicator (#6) and the admin-mode indicator (#4). */
+.site-status {
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.site-nav {
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
+}
+
+.site-nav__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  margin: 0;
+  padding: 0.5rem 0;
+  list-style: none;
+}
+
+/* Components -------------------------------------------------------------- */
+
+/* The repeating unit: a note, a question, a history entry. Border, never a
+ * drop shadow. */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 0.75rem 1rem;
+  margin: 0 0 1rem;
+}
+
+/* Author and timestamp, under the content they belong to. */
+.byline {
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+/* A sentence naming what is missing and what would fill it. Never a blank
+ * region and never a bare zero. */
+.empty {
+  color: var(--ink-muted);
+}
+
+/* Anything behind the admin PIN. A visual courtesy so members can tell which
+ * controls are not theirs — not a security boundary. */
+.admin-only {
+  outline: 1px dashed var(--warn);
+  outline-offset: 3px;
+}
+
+/* Track and fill. The number always sits beside it in the markup: colour and
+ * length never carry the meaning alone. */
+.progress {
+  display: inline-block;
+  vertical-align: middle;
+  width: 8rem;
+  max-width: 100%;
+  height: 0.6rem;
+  background: var(--rule);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress__fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+/* Messages ---------------------------------------------------------------- */
+
+.messages {
+  margin: 0 0 1.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.message {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--accent);
+  border-radius: 3px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.message--error,
+.message--warning {
+  border-left-color: var(--warn);
+}
+
+/* Forms ------------------------------------------------------------------- */
+
+label {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  max-width: 100%;
+}
+
+input,
+select,
+textarea {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: #fff;
+  color: var(--ink);
+}
+
+button {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--paper);
+  cursor: pointer;
+}
+
+.errorlist {
+  color: var(--warn);
+  margin: 0.25rem 0;
+  padding-left: 1.1rem;
+}
+
+/* Focus ------------------------------------------------------------------- */
+
+/* Visible on every interactive element. If you replace this, replace it with
+ * something at least as clear — do not just remove it. */
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+}
+
+.skip-link:focus {
+  left: 1rem;
+  top: 0.5rem;
+  z-index: 1;
+  background: var(--paper);
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--rule);
+}

@@ -1,0 +1,58 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Reading Club Manager{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'club/style.css' %}">
+  </head>
+  <body>
+    <a class="skip-link" href="#content">Skip to content</a>
+
+    <header class="site-header">
+      <div class="wrap site-header__inner">
+        <a class="site-title" href="{% url 'club:home' %}">Reading Club Manager</a>
+
+        <div class="site-status">
+          {% comment %}
+            SLOT: identity indicator. Issue #6 fills this with
+            "You are: Ada — switch", or an invitation when nobody has
+            identified themselves yet.
+
+            SLOT: admin-mode indicator. Issue #4 fills this when the PIN flag
+            is set in the session.
+          {% endcomment %}
+        </div>
+      </div>
+    </header>
+
+    <nav class="site-nav" aria-label="Main">
+      <div class="wrap">
+        <ul class="site-nav__list">
+          <li><a href="{% url 'club:home' %}">Home</a></li>
+
+          {% comment %}
+            Members (#5), Progress (#10), Discussion (#12) and History (#14)
+            each add their own entry here, in the same change that adds their
+            route. Do not add a link before its route exists: a {% url %} tag
+            against a missing route raises NoReverseMatch, and because every
+            page extends this template that breaks the whole site rather than
+            one page.
+          {% endcomment %}
+        </ul>
+      </div>
+    </nav>
+
+    <main class="wrap" id="content">
+      {% if messages %}
+        <ul class="messages">
+          {% for message in messages %}
+            <li class="message message--{{ message.tags }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>
