@@ -307,3 +307,10 @@ button {
   align-items: baseline;
   gap: 0.5rem;
 }
+
+/* Current book ------------------------------------------------------------ */
+
+.current-book__title {
+  font-size: 1.25rem;
+  margin: 0 0 0.25rem;
+}

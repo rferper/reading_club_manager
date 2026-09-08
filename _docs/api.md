@@ -24,7 +24,7 @@ status to Built; add a row before inventing a route that is not here.
 
 | Path | Name | Methods | Access | Purpose | Issue | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| `/` | `home` | GET | Public | Current book, author, dates; links out to everything else | #1, #8 | Placeholder page built in #1; #8 fills it in |
+| `/` | `home` | GET | Public | Current book, author, dates; links out to everything else | #1, #8 | Built |
 | `/who-are-you/` | `identify` | GET, POST | Public | Pick your name; stores it in the session | #6 | Built |
 | `/who-are-you/forget/` | `forget_me` | POST | Public | Clear the session identity | #6 | Built |
 | `/admin-pin/` | `admin_pin` | GET, POST | Public | Enter the PIN; sets the admin session flag | #4 | Built |
