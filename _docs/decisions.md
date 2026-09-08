@@ -299,3 +299,36 @@ leaving one alone does not touch the other.
 Why: decision #5. Picking a name is not a claim to be trusted, and the PIN is
 not a claim about who you are. Tying them together would be the first step
 towards mistaking either one for a permission system.
+
+## 17. Book ordering states its null placement, and the rating range is a constraint
+
+Settled while building the `Book` model (#7). Two details the issue left open.
+
+**`Book.Meta.ordering` is newest-finished first, with nulls explicitly last:**
+`F("finished_on").desc(nulls_last=True)`, then the same on `started_on`, then
+`-pk`.
+
+Why: the archive (#14) wants newest-finished first, and both dates are nullable
+— an unfinished book has neither. Left to the database, null placement under
+`DESC` is a per-backend detail, and the one row that is always unfinished is the
+current read, which must not lead a list of finished books. `-pk` is the final
+tiebreak so the order is total: two books finished the same day still come back
+in a stable order rather than whatever the query planner returns.
+
+**The 1-to-5 rating is a `CheckConstraint` as well as field validators.**
+
+Why: validators run in forms, which is where a typo actually arrives, and the
+constraint runs everywhere else — a fixture, the shell, a future management
+command. Decision #2 already puts the at-most-one-current rule in the database
+for the same reason: a rule enforced only in the code that remembered it is not
+enforced. Both carry a `violation_error_message`, so `full_clean` and the admin
+show a sentence rather than a constraint name.
+
+**No `save()` override guards either rule.** Moving the current-read flag from
+one book to the next is two saves in one transaction, and #14's finish flow does
+it explicitly.
+
+Why: a `save()` that silently cleared the other book's flag would make finishing
+a book a side effect of starting the next one, and would hide the moment the
+club has no current read — which decision #2 says is a state the app supports,
+not a gap to paper over.

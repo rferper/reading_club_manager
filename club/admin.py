@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Member
+from .models import Book, Member
 
 
 @admin.register(Member)
@@ -23,3 +23,24 @@ class MemberAdmin(admin.ModelAdmin):
         actions = super().get_actions(request)
         actions.pop("delete_selected", None)
         return actions
+
+
+@admin.register(Book)
+class BookAdmin(admin.ModelAdmin):
+    """Books can be added here until #14 builds the start and finish flows.
+
+    No ``ordering`` here on purpose: it would override ``Book.Meta.ordering``
+    and lose the explicit null placement on the two nullable dates.
+    """
+
+    list_display = (
+        "title",
+        "author",
+        "is_current",
+        "started_on",
+        "finished_on",
+        "rating",
+        "total_pages",
+    )
+    list_filter = ("is_current",)
+    search_fields = ("title", "author")
