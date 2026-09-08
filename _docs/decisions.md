@@ -258,3 +258,44 @@ Why: it is a different act from renaming someone, and a checkbox tucked beside
 the name field is how a member gets dropped off the roster by an admin who meant
 to fix a typo. A separate button with its own confirmation-shaped wording keeps
 the two apart. There is still no delete, ever — decision #3.
+
+## 16. Both gates refuse the same way, and identity lives in `club/identity.py`
+
+Settled while building viewer identity (#6). Decision #14 fixed how the admin
+gate refuses; this extends the same rule to the identity gate and says where the
+lookup lives.
+
+**`require_member` refuses exactly as `club_admin_required` does**: 302 to the
+picker with `?next=` on a GET or HEAD, 403 on anything else. Both decorators
+call one `_refuse` helper, so there is one refusal rule in the app rather than
+two that drift.
+
+Why: the argument from #14 holds unchanged — a redirect answers a POST with a
+GET and drops the payload. It is stronger here, because the routes behind this
+gate include POST-only ones (`/progress/update/`). Sending `?next=/progress/
+update/` through the picker would land the viewer back on that URL as a GET,
+which is a 405: the redirect is not merely lossy there, it is broken.
+
+**A session naming a member who is gone clears itself.** `current_member`
+resolves through `Member.objects.filter(pk=..., is_active=True)` and, on a miss,
+pops the session key and returns `None`.
+
+Why: sessions last two weeks and rosters change inside that, so a viewer who was
+deactivated mid-session is ordinary rather than exotic. Their next page load
+should show them as unidentified, one click from the picker — not a 500 on every
+page including the one that would let them fix it.
+
+**The lookup lives in `club/identity.py`**, imported by the context processor,
+the decorator and the views, and cached on the request.
+
+Why: three callers on the same request, and the alternative is the decorator
+importing from `context_processors.py`, which reads backwards. Caching keeps it
+to one query per request rather than one per caller.
+
+**The two session keys are unrelated.** `member_id` says who you are;
+`is_club_admin` says the PIN has been typed. Neither implies the other, and
+leaving one alone does not touch the other.
+
+Why: decision #5. Picking a name is not a claim to be trusted, and the PIN is
+not a claim about who you are. Tying them together would be the first step
+towards mistaking either one for a permission system.

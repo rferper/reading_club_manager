@@ -297,3 +297,13 @@ button {
   padding: 0.1rem 0.5rem;
   font-size: 0.9rem;
 }
+
+/* Identity ---------------------------------------------------------------- */
+
+/* "You are: Ada — switch", or the invitation when nobody has said. Sits in the
+ * header beside the admin-mode indicator. */
+.site-identity {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}

@@ -9,7 +9,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from .decorators import club_admin_required
-from .forms import AdminPinForm, MemberForm
+from .forms import AdminPinForm, IdentityForm, MemberForm
+from .identity import current_member, forget_member, remember_member
 from .models import Member
 
 
@@ -24,9 +25,9 @@ def home(request):
 def _safe_next(request, next_url):
     """The submitted `next`, or None when it cannot be trusted.
 
-    Rejects anything pointing off this host or scheme, and the PIN pages
-    themselves, so a bookmarked or hand-edited `?next=` cannot bounce the PIN
-    page back to itself.
+    Rejects anything pointing off this host or scheme, and the gate pages
+    themselves, so a bookmarked or hand-edited `?next=` cannot bounce a gate
+    back to itself or straight out through its own exit route.
     """
     if not next_url:
         return None
@@ -38,10 +39,13 @@ def _safe_next(request, next_url):
     ):
         return None
 
-    if urlsplit(next_url).path in {
+    gates = {
         reverse("club:admin_pin"),
         reverse("club:admin_exit"),
-    }:
+        reverse("club:identify"),
+        reverse("club:forget_me"),
+    }
+    if urlsplit(next_url).path in gates:
         return None
 
     return next_url
@@ -178,3 +182,48 @@ def member_toggle(request, pk):
         messages.success(request, f"{member.name} is no longer on the active roster.")
 
     return redirect("club:member_list")
+
+
+def identify(request):
+    """Say which member you are, once, for the rest of the session.
+
+    There is no password and there is not going to be one — decision #5.
+    Anyone may pick anyone; what this buys is a name on every note and answer
+    without any form having to ask for one.
+    """
+    next_url = _safe_next(request, request.POST.get("next") or request.GET.get("next"))
+    destination = next_url or reverse("club:home")
+
+    viewer = current_member(request)
+    form = IdentityForm(
+        request.POST or None,
+        initial={"member": viewer} if viewer else None,
+    )
+
+    if request.method == "POST" and form.is_valid():
+        member = form.cleaned_data["member"]
+        remember_member(request, member)
+        messages.success(request, f"You are {member.name}.")
+        return redirect(destination)
+
+    return render(
+        request,
+        "club/identify.html",
+        {
+            "form": form,
+            "next": next_url or "",
+            "roster_is_empty": not Member.objects.filter(is_active=True).exists(),
+        },
+    )
+
+
+@require_POST
+def forget_me(request):
+    """Stop being anybody in particular.
+
+    Not gated on being identified: clearing a key that is already absent is
+    the outcome the caller wanted either way.
+    """
+    forget_member(request)
+    messages.success(request, "Forgotten — pick a name again whenever you like.")
+    return redirect("club:home")

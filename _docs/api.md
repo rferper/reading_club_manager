@@ -25,8 +25,8 @@ status to Built; add a row before inventing a route that is not here.
 | Path | Name | Methods | Access | Purpose | Issue | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | `/` | `home` | GET | Public | Current book, author, dates; links out to everything else | #1, #8 | Placeholder page built in #1; #8 fills it in |
-| `/who-are-you/` | `identify` | GET, POST | Public | Pick your name; stores it in the session | #6 | Planned |
-| `/who-are-you/forget/` | `forget_me` | POST | Public | Clear the session identity | #6 | Planned |
+| `/who-are-you/` | `identify` | GET, POST | Public | Pick your name; stores it in the session | #6 | Built |
+| `/who-are-you/forget/` | `forget_me` | POST | Public | Clear the session identity | #6 | Built |
 | `/admin-pin/` | `admin_pin` | GET, POST | Public | Enter the PIN; sets the admin session flag | #4 | Built |
 | `/admin-pin/exit/` | `admin_exit` | POST | Admin | Leave admin mode | #4 | Built |
 | `/members/` | `member_list` | GET | Public | The roster, with roles and active state | #5 | Built |
@@ -56,10 +56,12 @@ status to Built; add a row before inventing a route that is not here.
 - **Refusals depend on the method.** A missing member identity or admin flag on
   a **GET or HEAD** redirects to `/who-are-you/` or `/admin-pin/` with a `?next=`
   back to where they were: the viewer is missing a step, and the redirect is
-  that step. On **any other method, POST included**, a missing admin flag is a
+  that step. On **any other method, POST included**, either missing gate is a
   **403** — a redirect would answer the POST with a GET, silently discard the
-  submitted data, and read as success to anything automated. A member trying to
-  act on someone else's content is likewise a 403, not a redirect.
+  submitted data, and read as success to anything automated; and sending a
+  POST-only route through `?next=` would land the viewer back on it as a GET,
+  which is a 405. A member trying to act on someone else's content is likewise
+  a 403, not a redirect.
 - **A submitted `?next=` is validated before it is followed**, with
   `url_has_allowed_host_and_scheme` against this host, falling back to `home`.
   `/admin-pin/` and `/admin-pin/exit/` are rejected as destinations too, so the
