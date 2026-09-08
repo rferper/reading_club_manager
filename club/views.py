@@ -4,11 +4,12 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.db.models import F, OuterRef, Prefetch, Subquery
 from django.db.models.functions import Lower
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -16,6 +17,9 @@ from .decorators import club_admin_required, require_member
 from .forms import (
     AdminPinForm,
     AnswerForm,
+    BookEditForm,
+    BookFinishForm,
+    BookForm,
     IdentityForm,
     MemberForm,
     NoteForm,
@@ -562,3 +566,137 @@ def question_delete(request, pk):
         return redirect("club:questions")
 
     return render(request, "club/question_confirm_delete.html", {"question": question})
+
+
+def history(request):
+    """Every book that is not the club's current read, newest finished first.
+
+    Uncapped, and staying that way — a club reads a dozen books a year, and
+    #20 holds search and pagination for whenever that stops being true.
+    """
+    return render(
+        request,
+        "club/history.html",
+        {"books": Book.objects.filter(is_current=False)},
+    )
+
+
+def history_detail(request, pk):
+    """One book's discussion, replayed read-only.
+
+    This works because notes, questions and answers carried a book foreign key
+    from the start (decision #8) rather than being scoped to whatever happened
+    to be current. Nothing here writes, and nothing here is offered to write.
+    """
+    book = get_object_or_404(Book, pk=pk)
+
+    return render(
+        request,
+        "club/history_detail.html",
+        {
+            "book": book,
+            "notes": book.notes.select_related("author"),
+            "questions": book.questions.prefetch_related(
+                Prefetch("answers", queryset=Answer.objects.select_related("member"))
+            ),
+            "progress": book.progress.select_related("member"),
+        },
+    )
+
+
+@club_admin_required
+def book_start(request):
+    """Make a new book the club's current read."""
+    current = Book.objects.current()
+
+    if current is not None:
+        messages.error(
+            request,
+            f"The club is already reading {current.title}. Finish that one first.",
+        )
+        return redirect("club:home")
+
+    form = BookForm(
+        request.POST or None, initial={"started_on": timezone.localdate()}
+    )
+
+    if request.method == "POST" and form.is_valid():
+        book = form.save(commit=False)
+        book.is_current = True
+
+        try:
+            with transaction.atomic():
+                book.save()
+        except IntegrityError:
+            # The check above is not a lock. Two admins starting a book at once
+            # is far-fetched, but the constraint is real and this is the
+            # difference between a sentence and a debug page.
+            form.add_error(
+                None, "Another book became the current read while you were typing."
+            )
+        else:
+            messages.success(request, f"{book.title} is the club's book now.")
+            return redirect("club:home")
+
+    return render(
+        request,
+        "club/book_form.html",
+        {"form": form, "heading": "Start a book", "submit_label": "Start reading"},
+    )
+
+
+@club_admin_required
+def book_finish(request, pk):
+    """Record the finish date and rating, and clear the current-read flag.
+
+    Nothing moves and nothing is deleted — decision #2. Every progress row,
+    note, question and answer keeps pointing at this same row, which is the
+    entire reason the flag exists instead of two tables.
+    """
+    book = get_object_or_404(Book, pk=pk, is_current=True)
+    form = BookFinishForm(
+        request.POST or None,
+        instance=book,
+        initial={"finished_on": timezone.localdate()},
+    )
+
+    if request.method == "POST" and form.is_valid():
+        finished = form.save(commit=False)
+        finished.is_current = False
+        finished.save()
+        messages.success(
+            request,
+            f"{finished.title} is in the archive, discussion and all.",
+        )
+        return redirect("club:history_detail", pk=finished.pk)
+
+    return render(request, "club/book_finish.html", {"form": form, "book": book})
+
+
+@club_admin_required
+def book_edit(request, pk):
+    """Correct a book's metadata, current or archived.
+
+    Not the current-read flag: that moves through starting and finishing, which
+    is where the rule about there being one of them lives.
+    """
+    book = get_object_or_404(Book, pk=pk)
+    form = BookEditForm(request.POST or None, instance=book)
+
+    if request.method == "POST" and form.is_valid():
+        book = form.save()
+        messages.success(request, f"{book.title} is updated.")
+        if book.is_current:
+            return redirect("club:home")
+        return redirect("club:history_detail", pk=book.pk)
+
+    return render(
+        request,
+        "club/book_form.html",
+        {
+            "form": form,
+            "book": book,
+            "heading": f"Edit {book.title}",
+            "submit_label": "Save changes",
+        },
+    )

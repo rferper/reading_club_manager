@@ -1,0 +1,23 @@
+{% extends "club/base.html" %}
+
+{% block title %}{{ heading }} — Reading Club Manager{% endblock %}
+
+{% block content %}
+  <h1>{{ heading }}</h1>
+
+  <form class="admin-only" method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">{{ submit_label }}</button>
+  </form>
+
+  {% if book %}
+    <p class="empty">
+      Editing a book's details leaves its progress, notes and answers exactly
+      where they are. Only starting and finishing move the current-read flag.
+    </p>
+    <p><a href="{% url 'club:history' %}">Back to the history</a></p>
+  {% else %}
+    <p><a href="{% url 'club:home' %}">Back to the current book</a></p>
+  {% endif %}
+{% endblock %}

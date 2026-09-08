@@ -1,0 +1,74 @@
+{% extends "club/base.html" %}
+
+{% block title %}{{ book.title }} — Reading Club Manager{% endblock %}
+
+{% block content %}
+  <h1>{{ book.title }}</h1>
+
+  <p class="byline">
+    by {{ book.author }}
+    {% if book.started_on %}· {{ book.started_on }}{% endif %}
+    {% if book.finished_on %}to {{ book.finished_on }}{% endif %}
+    {% if book.total_pages %}· {{ book.total_pages }} pages{% endif %}
+    {% if book.rating %}· rated {{ book.rating }} out of 5{% endif %}
+  </p>
+
+  {% if book.is_current %}
+    <p class="empty">
+      This is what the club is reading now, so this page is a preview of what
+      the archive will hold. The live
+      <a href="{% url 'club:notes' %}">notes</a> and
+      <a href="{% url 'club:questions' %}">questions</a> are still open.
+    </p>
+  {% else %}
+    <p class="empty">
+      Read-only. Nothing here can be added to or changed — the archive is the
+      record of what the club actually said at the time.
+    </p>
+  {% endif %}
+
+  {% if is_club_admin %}
+    <p>
+      <a class="admin-only" href="{% url 'club:book_edit' book.pk %}">Edit this entry</a>
+    </p>
+  {% endif %}
+
+  <h2>How far everyone got</h2>
+  {% for row in progress %}
+    <p>
+      {{ row.member.name }} — {{ row.pages_read }} pages{% if row.percent is not None %}, {{ row.percent }}%{% endif %}
+    </p>
+  {% empty %}
+    <p class="empty">Nobody recorded any progress on this one.</p>
+  {% endfor %}
+
+  <h2>Notes</h2>
+  {% for note in notes %}
+    <div class="panel note">
+      {{ note.body|linebreaks }}
+      <p class="byline">{{ note.author.name }} · {{ note.created_on }}</p>
+    </div>
+  {% empty %}
+    <p class="empty">No notes were written on this one.</p>
+  {% endfor %}
+
+  <h2>Questions</h2>
+  {% for question in questions %}
+    <div class="panel question">
+      <p class="question__text">{{ question.text|linebreaksbr }}</p>
+
+      {% for answer in question.answers.all %}
+        <div class="answer">
+          {{ answer.body|linebreaks }}
+          <p class="byline">{{ answer.member.name }} · {{ answer.created_on }}</p>
+        </div>
+      {% empty %}
+        <p class="empty">Nobody answered this one.</p>
+      {% endfor %}
+    </div>
+  {% empty %}
+    <p class="empty">No questions were posted on this one.</p>
+  {% endfor %}
+
+  <p><a href="{% url 'club:history' %}">Back to the history</a></p>
+{% endblock %}

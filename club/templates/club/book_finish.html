@@ -1,0 +1,28 @@
+{% extends "club/base.html" %}
+
+{% block title %}Finish {{ book.title }} — Reading Club Manager{% endblock %}
+
+{% block content %}
+  <h1>Finish this book?</h1>
+
+  <div class="panel">
+    <p class="current-book__title">{{ book.title }}</p>
+    <p class="byline">
+      by {{ book.author }}{% if book.started_on %} · started {{ book.started_on }}{% endif %}
+    </p>
+  </div>
+
+  <p class="empty">
+    Finishing moves {{ book.title }} into the history and leaves the club
+    between reads. Every progress row, note, question and answer stays exactly
+    where it is — the archive keeps the whole discussion.
+  </p>
+
+  <form class="admin-only" method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Finish this book</button>
+  </form>
+
+  <p><a href="{% url 'club:home' %}">Keep reading it</a></p>
+{% endblock %}

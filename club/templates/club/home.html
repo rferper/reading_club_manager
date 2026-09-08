@@ -26,11 +26,25 @@
       ·
       <a href="{% url 'club:progress_update' %}">Record your own progress</a>
     </p>
+
+    {% if is_club_admin %}
+      <div class="admin-only question__controls">
+        <a href="{% url 'club:book_edit' book.pk %}">Edit this book</a>
+        <a href="{% url 'club:book_finish' book.pk %}">Finish this book</a>
+      </div>
+    {% endif %}
   {% else %}
     <h1>Reading Club Manager</h1>
 
     <p class="empty">
-      No book in progress — an admin can start one.
+      No book in progress — an admin can start one. Everything the club has
+      read is still in the <a href="{% url 'club:history' %}">history</a>.
     </p>
+
+    {% if is_club_admin %}
+      <p>
+        <a class="admin-only" href="{% url 'club:book_start' %}">Start a book</a>
+      </p>
+    {% endif %}
   {% endif %}
 {% endblock %}

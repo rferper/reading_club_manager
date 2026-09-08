@@ -8,9 +8,9 @@ All routes live in `club/urls.py` under `app_name = 'club'` and are reversed as
 `{% url 'club:name' %}`. The project URLconf mounts them at `/`, alongside
 Django's own `/admin/`.
 
-This is the agreed target surface across issues #1–#15, and almost none of it is
-built yet. Update a row in the same commit that implements it and move its
-status to Built; add a row before inventing a route that is not here.
+This is the whole surface across issues #1-#15, and every row of it is built.
+Update a row in the same commit that changes it; add a row before inventing a
+route that is not here.
 
 ## Access levels
 
@@ -41,11 +41,11 @@ status to Built; add a row before inventing a route that is not here.
 | `/questions/add/` | `question_add` | GET, POST | Admin | Post a discussion question | #12 | Built |
 | `/questions/<pk>/edit/` | `question_edit` | GET, POST | Admin | Edit or reorder a question | #12 | Built |
 | `/questions/<pk>/delete/` | `question_delete` | GET, POST | Admin | Remove a question and its answers | #12 | Built |
-| `/history/` | `history` | GET | Public | Every finished book, newest first, uncapped | #14 | Planned |
-| `/history/<pk>/` | `history_detail` | GET | Public | One past book, its notes and answers, read-only | #14 | Planned |
-| `/books/start/` | `book_start` | GET, POST | Admin | Start a new current book | #14 | Planned |
-| `/books/<pk>/edit/` | `book_edit` | GET, POST | Admin | Edit a book's metadata | #14 | Planned |
-| `/books/<pk>/finish/` | `book_finish` | GET, POST | Admin | Record finish date and rating; clear the current flag | #14 | Planned |
+| `/history/` | `history` | GET | Public | Every book that is not the current read, newest finished first, uncapped | #14 | Built |
+| `/history/<pk>/` | `history_detail` | GET | Public | One book, its progress, notes and answers, read-only | #14 | Built |
+| `/books/start/` | `book_start` | GET, POST | Admin | Start a new current book | #14 | Built |
+| `/books/<pk>/edit/` | `book_edit` | GET, POST | Admin | Edit a book's metadata | #14 | Built |
+| `/books/<pk>/finish/` | `book_finish` | GET, POST | Admin | Record finish date and rating; clear the current flag | #14 | Built |
 
 ## Conventions
 

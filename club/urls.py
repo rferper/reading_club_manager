@@ -24,4 +24,9 @@ urlpatterns = [
     path(
         "questions/<int:pk>/delete/", views.question_delete, name="question_delete"
     ),
+    path("history/", views.history, name="history"),
+    path("history/<int:pk>/", views.history_detail, name="history_detail"),
+    path("books/start/", views.book_start, name="book_start"),
+    path("books/<int:pk>/edit/", views.book_edit, name="book_edit"),
+    path("books/<int:pk>/finish/", views.book_finish, name="book_finish"),
 ]

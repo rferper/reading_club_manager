@@ -45,8 +45,7 @@ class BaseTemplateTests(TestCase):
         self.assertContains(response, reverse("club:progress"))
         self.assertContains(response, reverse("club:notes"))
         self.assertContains(response, reverse("club:questions"))
-        for absent in ("/history/",):
-            self.assertNotContains(response, f'href="{absent}"')
+        self.assertContains(response, reverse("club:history"))
 
     def test_messages_are_rendered(self):
         html = render_to_string("club/base.html", {"messages": ["Progress saved."]})

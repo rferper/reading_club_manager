@@ -20,6 +20,7 @@ is a new module and nothing else. What is there now:
 | `test_notes.py` | the `Note` model, the notes page, who may remove one |
 | `test_questions.py` | the `Question` model, its order, the admin-only controls |
 | `test_answers.py` | the `Answer` model, its one-per-member rule, the answer forms |
+| `test_history.py` | finishing a book, the archive, and what survives the move |
 
 Put a test in the module that owns the rule it protects, not the module that
 owns the URL it happens to hit. Imports inside the package are relative to it:
