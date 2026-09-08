@@ -8,9 +8,9 @@ All routes live in `club/urls.py` under `app_name = 'club'` and are reversed as
 `{% url 'club:name' %}`. The project URLconf mounts them at `/`, alongside
 Django's own `/admin/`.
 
-**Nothing below is built yet.** This is the agreed target surface across issues
-#1–#15. Update a row in the same commit that implements it and move its status
-to Built; add a row before inventing a route that is not here.
+This is the agreed target surface across issues #1–#15, and almost none of it is
+built yet. Update a row in the same commit that implements it and move its
+status to Built; add a row before inventing a route that is not here.
 
 ## Access levels
 
@@ -24,7 +24,7 @@ to Built; add a row before inventing a route that is not here.
 
 | Path | Name | Methods | Access | Purpose | Issue | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| `/` | `home` | GET | Public | Current book, author, dates; links out to everything else | #8 | Planned |
+| `/` | `home` | GET | Public | Current book, author, dates; links out to everything else | #1, #8 | Placeholder page built in #1; #8 fills it in |
 | `/who-are-you/` | `identify` | GET, POST | Public | Pick your name; stores it in the session | #6 | Planned |
 | `/who-are-you/forget/` | `forget_me` | POST | Public | Clear the session identity | #6 | Planned |
 | `/admin-pin/` | `admin_pin` | GET, POST | Public | Enter the PIN; sets the admin session flag | #4 | Planned |
