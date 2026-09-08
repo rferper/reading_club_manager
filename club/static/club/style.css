@@ -347,3 +347,27 @@ button {
   width: 5rem;
   margin-right: 0.4rem;
 }
+
+/* Notes ------------------------------------------------------------------- */
+
+/* The byline sits under the note it belongs to, with the remove button on the
+ * same line so a panel does not grow a third row for one control. */
+.note__byline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.note__byline button {
+  padding: 0.1rem 0.5rem;
+  font-size: 0.9rem;
+  background: var(--paper);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+/* A note's own paragraphs, which `linebreaks` wraps in <p>. */
+.note p:first-child {
+  margin-top: 0;
+}

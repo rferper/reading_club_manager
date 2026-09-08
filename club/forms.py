@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Member, Progress
+from .models import Member, Note, Progress
 
 
 class AdminPinForm(forms.Form):
@@ -102,3 +102,26 @@ class ProgressForm(forms.ModelForm):
             )
 
         return pages_read
+
+
+class NoteForm(forms.ModelForm):
+    """A thought about the current book.
+
+    Body only. The author comes from the session and the book from what the
+    club is reading — decisions #4 and #8 — so neither is a field somebody
+    could submit.
+
+    Django's form field strips surrounding whitespace, so a body of spaces
+    arrives as "" and fails `required` without any check of its own.
+    """
+
+    class Meta:
+        model = Note
+        fields = ("body",)
+        labels = {"body": "Your note"}
+        widgets = {
+            "body": forms.Textarea(
+                attrs={"rows": 4, "placeholder": "I did not see that coming."}
+            )
+        }
+        error_messages = {"body": {"required": "A note needs something in it."}}
