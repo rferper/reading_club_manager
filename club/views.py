@@ -11,15 +11,16 @@ from django.views.decorators.http import require_POST
 from .decorators import club_admin_required
 from .forms import AdminPinForm, IdentityForm, MemberForm
 from .identity import current_member, forget_member, remember_member
-from .models import Member
+from .models import Book, Member
 
 
 def home(request):
-    """Placeholder landing page.
+    """The club's landing page: what we are reading right now.
 
-    Issue #8 replaces this with the current book and its details.
+    Between reads is a legitimate state (decision #2), so `current()` answering
+    None is the empty state and not an error.
     """
-    return render(request, "club/home.html")
+    return render(request, "club/home.html", {"book": Book.objects.current()})
 
 
 def _safe_next(request, next_url):

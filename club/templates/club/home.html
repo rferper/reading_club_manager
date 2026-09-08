@@ -1,9 +1,30 @@
 {% extends "club/base.html" %}
 
-{% block content %}
-  <h1>Reading Club Manager</h1>
+{% block title %}{% if book %}{{ book.title }} — {% endif %}Reading Club Manager{% endblock %}
 
-  <p class="empty">
-    The project is set up. Issue #8 turns this into the current book.
-  </p>
+{% block content %}
+  {% if book %}
+    <h1>We are reading</h1>
+
+    <div class="panel current-book">
+      <p class="current-book__title">{{ book.title }}</p>
+      <p class="byline">
+        by {{ book.author }}
+        {% if book.started_on %}· started {{ book.started_on }}{% endif %}
+        {% if book.total_pages %}· {{ book.total_pages }} pages{% endif %}
+      </p>
+    </div>
+
+    {% if not book.started_on %}
+      <p class="empty">
+        No start date recorded — an admin can add one from the Django admin.
+      </p>
+    {% endif %}
+  {% else %}
+    <h1>Reading Club Manager</h1>
+
+    <p class="empty">
+      No book in progress — an admin can start one.
+    </p>
+  {% endif %}
 {% endblock %}
