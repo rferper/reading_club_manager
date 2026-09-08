@@ -156,3 +156,34 @@ deadline here and no reason to spend the dependencies in advance of the need.
 
 Revisit if CI arrives and its reporting is wanted, or if the suite passes
 roughly 50 tests and setup duplication starts to hurt.
+
+## 13. `Member.joined_on` is editable, and names are unique case-insensitively
+
+Settled while building the `Member` model (#3). Two calls, both about the roster
+row:
+
+**`joined_on` defaults to today but stays editable.** The field is
+`DateField(default=timezone.localdate)` — a callable, no parentheses — and not
+`auto_now_add=True`.
+
+Why: `auto_now_add` makes the field non-editable, which hides it from every form
+including the admin's and leaves a wrong date uncorrectable. The club has
+founding members who joined long before this app existed, and the person typing
+them in is the one who knows when. `localdate` rather than `date.today` because
+`USE_TZ` is on and `TIME_ZONE` is `Europe/Madrid`, so "today" is the club's
+today, not UTC's.
+
+**Names are unique case-insensitively**, enforced by
+`UniqueConstraint(Lower("name"), name="member_name_unique_ci")` in `Meta`
+alongside plain `unique=True`.
+
+Why: a viewer identifies themselves by picking a name off this roster
+(decision #4), and "Ada" beside "ada" makes that pick a coin toss. `unique=True`
+alone does not get this — SQLite's default collation is case-sensitive and
+happily stores both rows. Keeping both rules means Django's model validation
+gives an exact duplicate a field-level error and a case-only duplicate a
+form-level one, so the roster form in #5 shows a form error rather than a 500.
+
+Cost accepted: case folding is all the normalisation there is. "José" and "Jose"
+are two members, and so are names differing by an internal double space. Django's
+form fields already strip surrounding whitespace, which covers the common typo.
