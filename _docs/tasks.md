@@ -4,12 +4,19 @@ Tasks for building the v1 scope described in `_docs/plan.md` as a Django app.
 Each task is sized for a single session and written to be picked up without
 having read the others.
 
-**The GitHub issues are the working copy.** Issues #1–#15 mirror this list, and
-they have since been groomed into the fuller `_docs/task-template.md` shape —
-checkable acceptance criteria, out-of-scope items linking to the follow-up they
-moved to, and the constraints each task must respect. Work from the issue, not
-from the summary below. Issues #16–#23 are v2 follow-ups filed during grooming
-and are not part of v1.
+**v1 is done.** Issues #1–#15 are all closed and merged to `master`. The
+summaries below are kept as the record of what each one was for; the closed
+issues carry the acceptance criteria they were actually checked against, and
+`_docs/decisions.md` #13–#22 carry the calls made while building them.
+
+What is left is the v2 backlog — issues #16–#24, filed during grooming and while
+building v1, each linked from the "Out of scope" section of the issue that
+deferred it. None of it is started.
+
+**The GitHub issues are the working copy.** They were groomed into the fuller
+`_docs/task-template.md` shape — checkable acceptance criteria, out-of-scope
+items linking to the follow-up they moved to, and the constraints each task must
+respect. Work from the issue, not from the summary below.
 
 Shared context for every task: this is a uv-managed Django project. The Django
 project package is `reading_club/`, the single app is `club/`, and `manage.py`
