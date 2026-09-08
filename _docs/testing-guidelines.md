@@ -4,10 +4,21 @@
 
     uv run python manage.py test
 
-Tests live in `club/tests.py` until that file gets unwieldy, at which point it
-becomes a `club/tests/` package with an `__init__.py` and one module per area
-(`test_progress.py`, `test_admin_pin.py`, …). The runner discovers any file
-matching `test*.py`.
+Tests live in `club/tests/`, a package with an `__init__.py` and one module per
+area. The runner discovers any file matching `test*.py` under it, so a new area
+is a new module and nothing else. What is there now:
+
+| Module | Covers |
+| --- | --- |
+| `test_pages.py` | the base layout and the landing page |
+| `test_members.py` | the `Member` model, its admin, and the roster page |
+| `test_admin_pin.py` | the PIN form, the admin gate, what refusal means |
+| `test_identity.py` | session identity and the member gate |
+| `test_books.py` | the `Book` model and the current-read flag |
+
+Put a test in the module that owns the rule it protects, not the module that
+owns the URL it happens to hit. Imports inside the package are relative to it:
+`from ..models import Book`.
 
 Each run builds a throwaway database and destroys it afterwards, so tests never
 touch `db.sqlite3` and never depend on what is in it.

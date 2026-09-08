@@ -9,13 +9,14 @@ progress, discussion, and the full history of past books. Scope is
 - `uv sync` — install dependencies
 - `uv run python manage.py runserver` — dev server on http://127.0.0.1:8000/
 - `uv run python manage.py test` — the whole suite
-- `uv run python manage.py test club.tests` — one module
+- `uv run python manage.py test club.tests.test_books` — one module
 - `uv run python manage.py makemigrations club` then `migrate` — after model changes
 - `uv run python manage.py check` — must stay at zero issues
 
 There is no `pytest` here and no top-level `tests/` directory. Tests live in
-`club/tests.py` and run under Django's own runner, which builds and destroys a
-temporary database per run. See `_docs/testing-guidelines.md`.
+`club/tests/`, one module per area, and run under Django's own runner, which
+builds and destroys a temporary database per run. See
+`_docs/testing-guidelines.md`.
 
 ## Layout
 
@@ -24,6 +25,7 @@ temporary database per run. See `_docs/testing-guidelines.md`.
 | `manage.py` | entrypoint, at the repo root |
 | `reading_club/` | project package — settings, root URLconf, wsgi/asgi |
 | `club/` | the single app — all models, views, forms, templates |
+| `club/tests/` | the suite, one module per area |
 | `club/templates/club/` | templates (`APP_DIRS` is on; the project's `DIRS` stays empty) |
 | `club/static/club/` | one hand-written stylesheet, no build step |
 | `_docs/` | spec, backlog, conventions, decisions |
