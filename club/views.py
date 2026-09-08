@@ -8,10 +8,10 @@ from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from .decorators import club_admin_required
-from .forms import AdminPinForm, IdentityForm, MemberForm
+from .decorators import club_admin_required, require_member
+from .forms import AdminPinForm, IdentityForm, MemberForm, ProgressForm
 from .identity import current_member, forget_member, remember_member
-from .models import Book, Member
+from .models import Book, Member, Progress
 
 
 def home(request):
@@ -228,3 +228,47 @@ def forget_me(request):
     forget_member(request)
     messages.success(request, "Forgotten — pick a name again whenever you like.")
     return redirect("club:home")
+
+
+@require_member
+def progress_update(request):
+    """Record how far you have read the current book.
+
+    The member comes from the session, never from the form — decision #4. GET
+    renders the form so an unidentified visitor is sent to the picker and
+    returned here; POST saves and redirects, so a refresh cannot resubmit.
+    """
+    book = Book.objects.current()
+
+    if book is None:
+        messages.error(
+            request, "There is no current book, so there is nothing to record yet."
+        )
+        return redirect("club:home")
+
+    member = current_member(request)
+
+    # Deliberately not `get_or_create`: a GET must not write a row. A member who
+    # opens the form and closes it again has recorded nothing, and #10 shows
+    # them as zero either way.
+    progress = Progress.objects.filter(book=book, member=member).first() or Progress(
+        book=book, member=member
+    )
+    form = ProgressForm(request.POST or None, instance=progress, book=book)
+
+    if request.method == "POST" and form.is_valid():
+        progress = form.save()
+        if progress.percent is None:
+            messages.success(request, f"You are {progress.pages_read} pages in.")
+        else:
+            messages.success(
+                request,
+                f"You are {progress.pages_read} pages in — {progress.percent}%.",
+            )
+        return redirect("club:home")
+
+    return render(
+        request,
+        "club/progress_form.html",
+        {"form": form, "book": book, "progress": progress},
+    )
