@@ -1,0 +1,27 @@
+{% extends "club/base.html" %}
+
+{% block title %}Admin mode — Reading Club Manager{% endblock %}
+
+{% block content %}
+  <h1>Admin mode</h1>
+
+  {% if pin_configured %}
+    <p class="empty">
+      The PIN is shared and it is not a login. It keeps admin pages out of the
+      way of members who did not mean to open them.
+    </p>
+
+    <form class="admin-only" method="post" action="">
+      {% csrf_token %}
+      {{ form.pin.errors }}
+      <p>
+        {{ form.pin.label_tag }}
+        {{ form.pin }}
+      </p>
+      <input type="hidden" name="next" value="{{ next }}">
+      <button type="submit">Enter admin mode</button>
+    </form>
+  {% else %}
+    <p class="empty">Admin mode is unavailable: no PIN is configured.</p>
+  {% endif %}
+{% endblock %}

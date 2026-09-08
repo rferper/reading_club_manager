@@ -27,8 +27,8 @@ status to Built; add a row before inventing a route that is not here.
 | `/` | `home` | GET | Public | Current book, author, dates; links out to everything else | #1, #8 | Placeholder page built in #1; #8 fills it in |
 | `/who-are-you/` | `identify` | GET, POST | Public | Pick your name; stores it in the session | #6 | Planned |
 | `/who-are-you/forget/` | `forget_me` | POST | Public | Clear the session identity | #6 | Planned |
-| `/admin-pin/` | `admin_pin` | GET, POST | Public | Enter the PIN; sets the admin session flag | #4 | Planned |
-| `/admin-pin/exit/` | `admin_exit` | POST | Admin | Leave admin mode | #4 | Planned |
+| `/admin-pin/` | `admin_pin` | GET, POST | Public | Enter the PIN; sets the admin session flag | #4 | Built |
+| `/admin-pin/exit/` | `admin_exit` | POST | Admin | Leave admin mode | #4 | Built |
 | `/members/` | `member_list` | GET | Public | The roster, with roles and active state | #5 | Planned |
 | `/members/add/` | `member_add` | GET, POST | Admin | Add a member | #5 | Planned |
 | `/members/<pk>/edit/` | `member_edit` | GET, POST | Admin | Rename a member or change their role | #5 | Planned |
@@ -53,9 +53,16 @@ status to Built; add a row before inventing a route that is not here.
   refresh cannot resubmit. Say what happened with a Django message.
 - **A GET never changes anything.** Delete and finish routes accept GET only to
   render a confirmation form; the change happens on POST with CSRF.
-- **Refusals.** A missing member identity redirects to `/who-are-you/` with a
-  `?next=` back to where they were. A missing admin flag redirects to
-  `/admin-pin/` the same way. A member trying to act on someone else's content
-  gets a 403, not a redirect — it is a real refusal, not a missing step.
+- **Refusals depend on the method.** A missing member identity or admin flag on
+  a **GET or HEAD** redirects to `/who-are-you/` or `/admin-pin/` with a `?next=`
+  back to where they were: the viewer is missing a step, and the redirect is
+  that step. On **any other method, POST included**, a missing admin flag is a
+  **403** — a redirect would answer the POST with a GET, silently discard the
+  submitted data, and read as success to anything automated. A member trying to
+  act on someone else's content is likewise a 403, not a redirect.
+- **A submitted `?next=` is validated before it is followed**, with
+  `url_has_allowed_host_and_scheme` against this host, falling back to `home`.
+  `/admin-pin/` and `/admin-pin/exit/` are rejected as destinations too, so the
+  PIN page can never redirect to itself or straight back out.
 - **Finished books are read-only** to members. Posting a note or an answer
   against a book that is no longer current is refused even though the URL exists.

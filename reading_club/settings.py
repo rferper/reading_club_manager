@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -26,6 +27,14 @@ SECRET_KEY = 'django-insecure-0fzkx0nnb-1hf6caddqo^o1!n2t+szjez31i+4=t09%mj!aity
 DEBUG = True
 
 ALLOWED_HOSTS = []
+
+# The shared admin PIN. `0000` is a development default; setting the
+# CLUB_ADMIN_PIN environment variable overrides it. This is not security —
+# decision #5 in _docs/decisions.md explains why, and it is why nothing
+# damaging to leak belongs in this app. A blank value (including
+# `CLUB_ADMIN_PIN=`, which resolves to "" rather than to the default) fails
+# closed: admin mode becomes unreachable.
+CLUB_ADMIN_PIN = os.environ.get("CLUB_ADMIN_PIN", "0000").strip()
 
 
 # Application definition
@@ -62,6 +71,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'club.context_processors.is_club_admin',
             ],
         },
     },
