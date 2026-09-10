@@ -262,6 +262,10 @@ def progress_update(request):
     The member comes from the session, never from the form — decision #4. GET
     renders the form so an unidentified visitor is sent to the picker and
     returned here; POST saves and redirects, so a refresh cannot resubmit.
+
+    A successful POST also appends a `ProgressEntry`, which is how the trail
+    on `progress_trail` gets its dots. The GET still writes neither of them
+    (decision #18).
     """
     book = Book.objects.current()
 
@@ -282,7 +286,12 @@ def progress_update(request):
     form = ProgressForm(request.POST or None, instance=progress, book=book)
 
     if request.method == "POST" and form.is_valid():
-        progress = form.save()
+        # `commit=False` and then `record()`, because saving the row and
+        # appending the entry that dates it are one act (decision #26).
+        # `Progress.record()` is the one place both writes happen, inside one
+        # transaction, so the row and the newest entry cannot drift apart.
+        progress = form.save(commit=False)
+        progress.record()
         # Never a bare count: the unit is part of the sentence, because "12"
         # means nothing on a book measured in chapters or in anything else.
         counted = f"You are {progress.units_read} {book.measure} in"

@@ -1,5 +1,5 @@
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models.functions import Lower
 from django.utils import timezone
 
@@ -191,8 +191,9 @@ class Progress(models.Model):
     book is if neither of them stores it.
 
     One row per member per book, enforced in the database. Recording progress
-    again updates the row; it does not add a second one. A member's progress
-    over time would be a different model, and it is #18.
+    again updates the row; it does not add a second one. How the member got
+    here is a second model beside this one — `ProgressEntry`, appended by
+    `record()` in the same transaction as the save (decision #26).
 
     ``chapters_read`` is a second column rather than a reuse of the first. A
     member who recorded 431 pages before the book switched to chapters must not
@@ -287,6 +288,141 @@ class Progress(models.Model):
             return None
 
         return self.book.percent_of(self.units_read)
+
+
+    def record(self):
+        """Save this row and append the entry that says when it got here.
+
+        The one place both writes happen, and they happen together. `Progress`
+        stays the answer to "where is this member now" and `ProgressEntry` is
+        the record of how they got there (decision #26); two places holding the
+        same number can only stay honest if one function writes both, inside
+        one transaction.
+
+        No `save()` override does this — decision #17. Recording progress is an
+        act with a consequence, and the consequence is written where the act
+        is, not hidden underneath it.
+
+        An unchanged resubmission appends nothing: `updated_on` moves, because
+        the member did say it again, but a trail is a record of movement and
+        three identical dots from a double-clicked save are noise in the one
+        place this exists to make readable.
+
+        Returns the appended entry, or ``None`` when nothing moved.
+        """
+        column = (
+            "chapters_read" if self.book.measure == "chapters" else "pages_read"
+        )
+        units_read = getattr(self, column)
+
+        with transaction.atomic():
+            self.save()
+
+            # Nothing has been recorded in the unit this book counts in, so
+            # there is no number to put on the trail. Reachable only from the
+            # shell: `ProgressForm` requires the field it asks for.
+            if units_read is None:
+                return None
+
+            # The newest entry is the one that must match this row, so it is
+            # the one worth comparing against — and comparing against it means
+            # the two cannot silently drift apart either.
+            latest = self.entries.first()
+
+            if latest is not None and getattr(latest, column) == units_read:
+                return None
+
+            return self.entries.create(**{column: units_read})
+
+
+class ProgressEntry(models.Model):
+    """One number a member recorded against one book, and when.
+
+    Append-only, and beside `Progress` rather than instead of it (decision
+    #26). `Progress` keeps its unique row per member per book and keeps meaning
+    "where this member is now"; this is every value that row has ever held, so
+    the club can read a member's trail through a book instead of only its end.
+
+    Nothing edits or deletes an entry. A typo recorded here is permanent, and an
+    admin correcting a `Progress` row straight in `/admin/` moves the current
+    value without leaving a dot on the trail. That is the named cost of keeping
+    the two models apart, and #31 is where it gets paid off.
+
+    Two columns rather than one reused, for decision #25's reason exactly: a
+    number recorded on one scale must never become readable against another.
+    An entry carries one of them and never both — a `CheckConstraint` says so,
+    so a fixture and a shell meet the rule as well as the view does.
+
+    No percentage is stored here either (decision #1). `percent` derives it
+    through `Book.percent_of()`, which stays the only place the arithmetic
+    lives (decision #19).
+    """
+
+    progress = models.ForeignKey(
+        Progress, on_delete=models.CASCADE, related_name="entries"
+    )
+
+    # Both nullable, unlike `Progress.pages_read`: an entry records the one
+    # unit it was typed in and says nothing at all about the other, and the
+    # constraint below is what makes "nothing at all" unambiguous.
+    pages_read = models.PositiveIntegerField(null=True, blank=True)
+    chapters_read = models.PositiveIntegerField(null=True, blank=True)
+
+    recorded_on = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = "progress entries"
+        # Newest first, which is the order the trail reads in. `-pk` breaks the
+        # tie between two entries saved inside the same clock tick, the way
+        # `Note` already does it.
+        ordering = ["-recorded_on", "-pk"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(pages_read__isnull=False, chapters_read__isnull=True)
+                    | models.Q(pages_read__isnull=True, chapters_read__isnull=False)
+                ),
+                name="entry_counts_one_measure",
+                violation_error_message=(
+                    "An entry records pages or chapters — one of the two, "
+                    "never both and never neither."
+                ),
+            )
+        ]
+
+    def __str__(self):
+        if self.pages_read is not None:
+            return f"{self.pages_read} pages on {self.recorded_on:%Y-%m-%d}"
+
+        return f"{self.chapters_read} chapters on {self.recorded_on:%Y-%m-%d}"
+
+    @property
+    def units_read(self):
+        """This entry's count, if it is in the unit the book measures in now.
+
+        Exactly what `Progress.units_read` answers, and for the same reason:
+        the column the book counts in is the answer and the other column is
+        left alone. ``None`` when this entry was recorded before the book
+        changed measure — it is still a true thing somebody typed, it is simply
+        not on this trail.
+        """
+        return (
+            self.chapters_read
+            if self.progress.book.measure == "chapters"
+            else self.pages_read
+        )
+
+    @property
+    def percent(self):
+        """Whole percent of the book this entry covers, or ``None``.
+
+        Derived, never stored, and through `Book.percent_of()` — decisions #1
+        and #19. There is no second copy of this arithmetic anywhere.
+        """
+        if self.units_read is None:
+            return None
+
+        return self.progress.book.percent_of(self.units_read)
 
 
 class Note(models.Model):
