@@ -34,7 +34,7 @@ route that is not here.
 | `/members/<pk>/edit/` | `member_edit` | GET, POST | Admin | Rename a member or change their role | #5 | Built |
 | `/members/<pk>/toggle/` | `member_toggle` | POST | Admin | Deactivate or reactivate a member | #5 | Built |
 | `/progress/` | `progress` | GET | Public | Everyone's progress on the current book, furthest first | #10 | Built |
-| `/progress/update/` | `progress_update` | GET, POST | Member | Your own pages read: GET the form, POST to save | #9 | Built |
+| `/progress/update/` | `progress_update` | GET, POST | Member | How far you have read the current book, counted in whatever that book is measured in — pages, or chapters: GET the form, POST to save | #9, #17 | Built |
 | `/notes/` | `notes` | GET, POST | GET Public, POST Member | Notes newest-first, plus the add form | #11 | Built |
 | `/notes/<pk>/delete/` | `note_delete` | POST | Author or Admin | Remove a note | #11 | Built |
 | `/questions/` | `questions` | GET, POST | GET Public, POST Member | Questions in order with their answers; POST submits your answer | #12, #13 | Built |

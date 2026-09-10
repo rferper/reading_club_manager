@@ -584,3 +584,97 @@ where the average landed on the club's own number, would show the feature and
 hide the reason it is a second column rather than the same one — decision #9's
 point that what the club agreed out loud and what five people privately thought
 are different facts.
+
+## 24. Chapters are the second denominator, and a book has only one
+
+Settled while building chapter progress (#17). The issue was filed with two
+options and this is the one it closes on.
+
+**A book with no page count declares a chapter count; a member never types a
+percentage.**
+
+Why: decision #1 exists so that two members can never disagree about what half
+of the same book is. A typed percentage is that disagreement made storable —
+Ada's 50% and Ben's 50% would be two opinions about the same book with nothing
+to reconcile them, and comparing members is the entire point of the feature. It
+would also break the one rule the model has held since #7: no percentage is
+ever stored. A chapter count keeps both. The book owns the denominator, the
+member records a count, `Book.percent_of()` stays the only place the arithmetic
+lives (decision #19), and nothing about how a percentage is produced changes —
+only what it is divided by.
+
+It is also the smaller change. A typed percentage means a second, differently
+shaped path through progress: a nullable percent column, a branch in the form,
+a branch in the overview, and a permanent question about what happens when a
+book that had typed percentages later gains a page count.
+
+**A book carries at most one denominator, and a `CheckConstraint` says so.**
+Both counts at once is refused in the database, with a
+`violation_error_message`, and again by a form error that names which one to
+keep.
+
+Why: two denominators is two answers to "how far is Ada", which is the thing
+decision #1 was written to prevent. In the database for the reason decisions #2
+and #17 already give: a rule enforced only in the form that remembered it is
+not enforced, and a fixture, a shell or a future management command all walk
+straight past a form. The form error exists because a constraint message cannot
+say which of the two the club should keep, and that is the only question the
+admin actually has.
+
+**`Book.measure` and `Book.total_units` are where the choice is read**, and
+`total_pages` and `pages_read` keep their names.
+
+Why: renaming them to something unit-neutral is roughly 140 references across
+17 files, and the names are honest — `pages_read` holds pages, always. The
+generic reading belongs on the two derived properties, which is also the only
+place the branch has to exist. Pages stay the default measure, so a book with
+neither count behaves exactly as it did before this issue: raw pages, no
+percentage, no upper bound.
+
+**A count of zero is a typo rather than a measure.** `total_chapters = 0` reads
+as no chapter count at all, the same answer `percent_of` has always given a page
+count of zero, and `Progress.Meta.ordering` asks `> 0` rather than `IS NOT NULL`
+so that the two cannot disagree.
+
+## 25. `chapters_read` is a second column, and it is nullable
+
+Settled while building chapter progress (#17), and the reason a book may change
+measure without anybody losing anything.
+
+**Chapters are recorded in `Progress.chapters_read`, never in `pages_read`.**
+
+Why: a member who recorded 431 pages before the book dropped its page count must
+not silently become 431 chapters in. That is not a display problem — it is a
+number that was true about one scale being read against another, which is
+silent data corruption. Two columns cost one migration and keep every recorded
+number meaning what it meant when it was typed. The migration is additive and
+rewrites no existing row.
+
+**The column is nullable where `pages_read` defaults to zero**, and that
+difference is decision #19 applied to a case it did not anticipate.
+
+Why: on a book that has always been measured in pages, the existence of the row
+is what says somebody recorded something. On a book that changed measure, the
+row is already there and says nothing at all about chapters — so a defaulted
+zero would put the member on the table at "0 of 30", which is a sentence they
+never said. Null means nothing recorded in chapters, zero means "I have the book
+and I am on chapter nought", and the overview shows the first as **not started**
+and the second as a recorded zero, exactly as decision #19 asks. `pages_read`
+is left alone rather than made nullable to match: every row that exists has a
+real page count in it, and a friendlier conversion after a measure change is
+#21.
+
+**`ProgressForm` drops the field the book does not measure in** rather than
+hiding it, so a hand-typed `pages_read` on a chapter-measured book is ignored
+instead of stored.
+
+**`Progress.Meta.ordering` asks the book which column "furthest along" means**,
+through a `Case` that joins to it, rather than naming `pages_read` and being
+wrong about every chapter-measured read. The archive lists progress through that
+ordering and now gets it right for both. Nulls are placed explicitly last, as
+decision #17 requires of every ordering here.
+
+The overview keeps its single subquery: it selects the column this book is
+measured in, which is one column either way. Two queries at two members and at
+twenty-two, still pinned by `assertNumQueries` — decision #19's count is
+unchanged, not merely re-measured.
