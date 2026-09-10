@@ -54,6 +54,13 @@ class Book(models.Model):
     ``total_pages`` exists so the progress percentage can be derived
     (decision #1). No percentage is ever stored. ``rating`` is club-level and
     recorded at finish time (decision #9).
+
+    A book that nobody can page-match — an ebook, an audiobook, an edition the
+    club does not share — declares ``total_chapters`` instead. At most one of
+    the two, because two denominators is two answers to "how far is Ada", and
+    decision #1 exists to make sure there is only ever one. ``measure`` and
+    ``total_units`` are where that choice is read; ``total_pages`` and
+    ``pages_read`` keep their honest names and keep holding pages.
     """
 
     title = models.CharField(max_length=200)
@@ -62,6 +69,11 @@ class Book(models.Model):
     # Nullable: a club can start a book before anyone has checked the page
     # count, and progress then shows raw pages instead of a percentage.
     total_pages = models.PositiveIntegerField(null=True, blank=True)
+
+    # The other denominator, for a book whose pages nobody can agree on. Never
+    # both at once — the constraint below refuses that everywhere, not only in
+    # the form that remembered to ask.
+    total_chapters = models.PositiveIntegerField(null=True, blank=True)
 
     started_on = models.DateField(null=True, blank=True)
     finished_on = models.DateField(null=True, blank=True)
@@ -105,31 +117,69 @@ class Book(models.Model):
                 name="book_rating_1_to_5",
                 violation_error_message="A rating runs from 1 to 5.",
             ),
+            # One denominator per book. In the database for the reason
+            # decisions #2 and #17 give: a rule that lives only in the form
+            # that remembered it is not a rule, and a fixture, a shell or a
+            # future management command all walk straight past a form.
+            models.CheckConstraint(
+                condition=models.Q(total_pages__isnull=True)
+                | models.Q(total_chapters__isnull=True),
+                name="book_has_one_denominator",
+                violation_error_message=(
+                    "A book is measured in pages or in chapters, not both."
+                ),
+            ),
         ]
 
     def __str__(self):
         return f"{self.title} by {self.author}"
 
-    def percent_of(self, pages_read):
-        """Whole percent of this book that ``pages_read`` covers, or ``None``.
+    @property
+    def measure(self):
+        """What this book is measured in: ``"chapters"`` or ``"pages"``.
+
+        Pages are the default, so a book with neither count behaves exactly as
+        it always has. A chapter count of zero is a typo rather than a book —
+        the same reading `percent_of` has always given a page count of zero —
+        so it falls back to pages rather than measuring in nothing.
+
+        Plural, because that is how every template and message uses it: "12 of
+        30 chapters", "You are 440 pages in".
+        """
+        return "chapters" if self.total_chapters else "pages"
+
+    @property
+    def total_units(self):
+        """The denominator this book carries, or ``None``.
+
+        The one place the choice between the two columns is made for a book,
+        so no caller has to make it again.
+        """
+        return self.total_chapters if self.measure == "chapters" else self.total_pages
+
+    def percent_of(self, units_read):
+        """Whole percent of this book that ``units_read`` covers, or ``None``.
 
         The one place the rule from decision #1 lives, because two pages read
         the same book: `Progress.percent` for a stored row, and the overview
-        (#10), which annotates members with a page count and has no `Progress`
+        (#10), which annotates members with a count and has no `Progress`
         instance to ask.
 
-        ``None`` when the book has no page count — or a page count of zero,
-        which is a typo rather than a book. The club sees raw pages then, which
-        decision #1 accepts as a data-entry problem rather than a modelling one.
+        ``None`` when the book has no page or chapter count — or a count of
+        zero, which is a typo rather than a book. The club sees raw counts
+        then, which decision #1 accepts as a data-entry problem rather than a
+        modelling one.
 
-        Capped at 100: pages read can legitimately exceed the total after an
-        admin corrects a page count downwards, and this number is a CSS bar
-        width. A bar past its own track is a rendering bug, not information.
+        Capped at 100: units read can legitimately exceed the total after an
+        admin corrects a count downwards, and this number is a CSS bar width.
+        A bar past its own track is a rendering bug, not information.
         """
-        if not self.total_pages:
+        total = self.total_units
+
+        if not total:
             return None
 
-        return min(100, round(100 * pages_read / self.total_pages))
+        return min(100, round(100 * units_read / total))
 
 
 class Progress(models.Model):
@@ -143,6 +193,22 @@ class Progress(models.Model):
     One row per member per book, enforced in the database. Recording progress
     again updates the row; it does not add a second one. A member's progress
     over time would be a different model, and it is #18.
+
+    ``chapters_read`` is a second column rather than a reuse of the first. A
+    member who recorded 431 pages before the book switched to chapters must not
+    silently become 431 chapters in: their pages stay where they are, they read
+    as not started until they re-record, and nothing is rewritten. That is
+    decision #19's distinction — nothing recorded and a recorded zero are
+    different sentences — applied to a case it did not anticipate.
+
+    It is nullable where ``pages_read`` defaults to zero, and that difference is
+    the distinction itself. On a book that has always been measured in pages,
+    the row's existence is what says somebody recorded something. On a book that
+    changed measure, the row is already there and says nothing about chapters —
+    so null means "not recorded in chapters" and zero means "I have the book and
+    I am on chapter nought", which are the two sentences decision #19 keeps
+    apart. Nothing rewrites ``pages_read`` to match; a book changing measure the
+    other way is #21's conversion, not this column's problem.
     """
 
     book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name="progress")
@@ -150,13 +216,28 @@ class Progress(models.Model):
         Member, on_delete=models.CASCADE, related_name="progress"
     )
     pages_read = models.PositiveIntegerField(default=0)
+    chapters_read = models.PositiveIntegerField(null=True, blank=True)
     updated_on = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name_plural = "progress"
         # Furthest along first, then by name, which is the order #10's overview
-        # reads in. Ties are common — everyone starts on zero.
-        ordering = ["-pages_read", Lower("member__name")]
+        # and the archive both read in. Ties are common — everyone starts on
+        # zero.
+        #
+        # Which column "furthest" means is a fact about the book, so the
+        # ordering asks the book rather than naming one column and being wrong
+        # about every chapter-measured read. `> 0` rather than `IS NOT NULL`,
+        # so this and `Book.measure` agree about a chapter count of zero.
+        ordering = [
+            models.Case(
+                models.When(
+                    book__total_chapters__gt=0, then=models.F("chapters_read")
+                ),
+                default=models.F("pages_read"),
+            ).desc(nulls_last=True),
+            Lower("member__name"),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=["book", "member"],
@@ -168,17 +249,44 @@ class Progress(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.member} — {self.pages_read} pages of {self.book.title}"
+        if self.units_read is None:
+            return f"{self.member} — nothing recorded on {self.book.title}"
+
+        return (
+            f"{self.member} — {self.units_read} {self.book.measure} "
+            f"of {self.book.title}"
+        )
+
+    @property
+    def units_read(self):
+        """However far this member has read, in whatever the book measures in.
+
+        Reads the column the book is measured in and leaves the other one
+        alone. A page count recorded before the book changed measure is still
+        there; it simply stops being the answer to "how far", and this answers
+        ``None`` — nothing recorded — until the member says so in chapters.
+        """
+        return (
+            self.chapters_read
+            if self.book.measure == "chapters"
+            else self.pages_read
+        )
 
     @property
     def percent(self):
-        """Whole percent of the book read, or ``None`` with no page count.
+        """Whole percent of the book read, or ``None`` with nothing to divide.
 
         Derived on every read, never stored — decision #1. The arithmetic lives
         on `Book`, so this row and the overview's annotated members cannot
         disagree about what half of the same book is.
+
+        ``None`` both when the book carries no count and when this member has
+        recorded nothing in the unit it counts in.
         """
-        return self.book.percent_of(self.pages_read)
+        if self.units_read is None:
+            return None
+
+        return self.book.percent_of(self.units_read)
 
 
 class Note(models.Model):
