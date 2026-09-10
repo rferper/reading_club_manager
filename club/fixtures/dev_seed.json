@@ -146,6 +146,46 @@
   }
 },
 {
+  "model": "club.memberrating",
+  "pk": 1,
+  "fields": {
+    "book": 1,
+    "member": 1,
+    "score": 5,
+    "updated_on": "2026-06-23T19:00:00Z"
+  }
+},
+{
+  "model": "club.memberrating",
+  "pk": 2,
+  "fields": {
+    "book": 1,
+    "member": 2,
+    "score": 4,
+    "updated_on": "2026-06-23T20:00:00Z"
+  }
+},
+{
+  "model": "club.memberrating",
+  "pk": 3,
+  "fields": {
+    "book": 1,
+    "member": 3,
+    "score": 3,
+    "updated_on": "2026-06-24T08:00:00Z"
+  }
+},
+{
+  "model": "club.memberrating",
+  "pk": 4,
+  "fields": {
+    "book": 1,
+    "member": 5,
+    "score": 5,
+    "updated_on": "2026-06-23T19:30:00Z"
+  }
+},
+{
   "model": "club.note",
   "pk": 1,
   "fields": {

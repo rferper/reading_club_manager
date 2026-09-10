@@ -10,7 +10,7 @@ the JSON parses.
 from django.test import TestCase
 from django.urls import reverse
 
-from ..models import Answer, Book, Member, Note, Progress, Question
+from ..models import Answer, Book, Member, MemberRating, Note, Progress, Question
 
 
 class SeedFixtureTests(TestCase):
@@ -89,6 +89,42 @@ class SeedFixtureTests(TestCase):
 
         self.assertIsNotNone(finished.rating)
 
+    def test_the_finished_book_also_carries_member_ratings(self):
+        """#16: the club's own number and the members' scores are different
+        facts (decision #9), and the fixture has to show both or the archive
+        looks like it only has one."""
+        finished = Book.objects.filter(is_current=False).first()
+
+        self.assertGreaterEqual(finished.ratings.count(), 3)
+
+    def test_the_seeded_scores_disagree_with_each_other(self):
+        """An average that equals every score in it teaches nothing."""
+        scores = set(MemberRating.objects.values_list("score", flat=True))
+
+        self.assertGreater(len(scores), 1, "every seeded member scored the same")
+
+    def test_the_member_average_is_not_the_clubs_own_number(self):
+        finished = Book.objects.filter(is_current=False).first()
+        scores = list(finished.ratings.values_list("score", flat=True))
+
+        self.assertNotEqual(sum(scores) / len(scores), finished.rating)
+
+    def test_the_deactivated_member_left_a_rating_behind(self):
+        """Decision #3: her score stays in the average and keeps her name."""
+        departed = Member.objects.filter(is_active=False).first()
+
+        self.assertTrue(departed.ratings.exists())
+
+    def test_somebody_has_not_rated_the_finished_book(self):
+        """So the seed shows a partial spread rather than a full house."""
+        finished = Book.objects.filter(is_current=False).first()
+        rated = set(finished.ratings.values_list("member_id", flat=True))
+
+        self.assertTrue(
+            {member.pk for member in Member.objects.all()} - rated,
+            "every seeded member rated it; nobody is missing",
+        )
+
 
 class SeededPagesRenderRealContentTests(TestCase):
     """Every page, with the fixture loaded, showing content and not an empty state."""
@@ -125,6 +161,24 @@ class SeededPagesRenderRealContentTests(TestCase):
                 response = self.client.get(url)
 
                 self.assertNotContains(response, "No book in progress")
+
+    def test_the_archive_shows_a_member_average_without_typing_one(self):
+        response = self.client.get(reverse("club:history"))
+
+        self.assertContains(response, "members averaged")
+
+    def test_the_archive_entry_shows_every_seeded_score_with_its_name(self):
+        finished = Book.objects.filter(is_current=False).first()
+
+        response = self.client.get(
+            reverse("club:history_detail", args=[finished.pk])
+        )
+
+        for rating in finished.ratings.select_related("member"):
+            with self.subTest(member=rating.member.name):
+                self.assertContains(
+                    response, f"{rating.member.name} — {rating.score} out of 5"
+                )
 
     def test_the_archive_is_not_empty(self):
         response = self.client.get(reverse("club:history"))
