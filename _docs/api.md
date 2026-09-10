@@ -8,7 +8,7 @@ All routes live in `club/urls.py` under `app_name = 'club'` and are reversed as
 `{% url 'club:name' %}`. The project URLconf mounts them at `/`, alongside
 Django's own `/admin/`.
 
-This is the whole surface across issues #1-#15, and every row of it is built.
+This is the whole surface across issues #1-#16, and every row of it is built.
 Update a row in the same commit that changes it; add a row before inventing a
 route that is not here.
 
@@ -42,10 +42,11 @@ route that is not here.
 | `/questions/<pk>/edit/` | `question_edit` | GET, POST | Admin | Edit or reorder a question | #12 | Built |
 | `/questions/<pk>/delete/` | `question_delete` | GET, POST | Admin | Remove a question and its answers | #12 | Built |
 | `/history/` | `history` | GET | Public | Every book that is not the current read, newest finished first, uncapped | #14 | Built |
-| `/history/<pk>/` | `history_detail` | GET | Public | One book, its progress, notes and answers, read-only | #14 | Built |
+| `/history/<pk>/` | `history_detail` | GET | Public | One book: its progress, notes, answers and every member's score. The discussion is read-only; an identified member also gets a rating form here, posting to `book_rate` | #14, #16 | Built |
 | `/books/start/` | `book_start` | GET, POST | Admin | Start a new current book | #14 | Built |
 | `/books/<pk>/edit/` | `book_edit` | GET, POST | Admin | Edit a book's metadata | #14 | Built |
 | `/books/<pk>/finish/` | `book_finish` | GET, POST | Admin | Record finish date and rating; clear the current flag | #14 | Built |
+| `/books/<pk>/rate/` | `book_rate` | GET, POST | Member | Your own score of 1-5 on a finished book: GET the form, POST to save. Posted from the form on `/history/<pk>/`; renders its own page for a direct GET or a rejected score. Refuses the current read with a message | #16 | Built |
 
 ## Conventions
 
@@ -66,5 +67,11 @@ route that is not here.
   `url_has_allowed_host_and_scheme` against this host, falling back to `home`.
   `/admin-pin/` and `/admin-pin/exit/` are rejected as destinations too, so the
   PIN page can never redirect to itself or straight back out.
-- **Finished books are read-only** to members. Posting a note or an answer
-  against a book that is no longer current is refused even though the URL exists.
+- **Finished books are read-only for the discussion**, and open for rating.
+  Posting a note or an answer against a book that is no longer current is
+  refused even though the URL exists. `/books/<pk>/rate/` is the one exception,
+  narrowed in decision #23 — you rate a book once you have finished it — and it
+  refuses the mirror image, the book the club is still reading. An unidentified
+  POST there is a 403 like everywhere else, and the current-read refusal is a
+  redirect with a message rather than a status code: it says the action has
+  stopped meaning anything, not that the viewer is the wrong person.
