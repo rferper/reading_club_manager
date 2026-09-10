@@ -255,6 +255,235 @@ class ProgressBoundsTests(TestCase):
         self.assertContains(response, "You are 5000 pages in.")
 
 
+class ChapterProgressTests(TestCase):
+    """A book measured in chapters: same rules, a different denominator (#17).
+
+    Decision #1 is untouched — the book still owns the scale, the member still
+    records a count, and no percentage is stored anywhere.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.book = Book.objects.create(
+            title="Piranesi",
+            author="Susanna Clarke",
+            total_chapters=30,
+            started_on=date(2025, 9, 1),
+            is_current=True,
+        )
+
+    def setUp(self):
+        session = self.client.session
+        session["member_id"] = self.ada.pk
+        session.save()
+
+    def test_units_read_reads_the_chapter_column(self):
+        progress = Progress(
+            book=self.book, member=self.ada, pages_read=431, chapters_read=12
+        )
+
+        self.assertEqual(progress.units_read, 12)
+
+    def test_the_percentage_divides_by_the_chapter_count(self):
+        progress = Progress(book=self.book, member=self.ada, chapters_read=15)
+
+        self.assertEqual(progress.percent, 50)
+
+    def test_the_form_asks_for_chapters_and_says_out_of_how_many(self):
+        response = self.client.get(reverse("club:progress_update"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Chapters read")
+        self.assertContains(response, "Out of 30")
+        self.assertContains(response, 'for="id_chapters_read"')
+
+    def test_the_form_offers_the_chapter_field_and_nothing_else(self):
+        """Not the page field hidden — absent, so saving chapters cannot
+        overwrite a page count recorded before the book changed measure."""
+        response = self.client.get(reverse("club:progress_update"))
+
+        self.assertEqual(list(response.context["form"].fields), ["chapters_read"])
+
+    def test_submitting_records_chapters(self):
+        response = self.client.post(
+            reverse("club:progress_update"), {"chapters_read": "12"}, follow=True
+        )
+
+        self.assertRedirects(response, reverse("club:home"))
+        progress = Progress.objects.get()
+        self.assertEqual(progress.chapters_read, 12)
+        self.assertEqual(progress.pages_read, 0)
+
+    def test_the_message_names_the_unit_rather_than_a_bare_count(self):
+        response = self.client.post(
+            reverse("club:progress_update"), {"chapters_read": "12"}, follow=True
+        )
+
+        self.assertContains(response, "You are 12 chapters in — 40%.")
+
+    def test_more_chapters_than_the_book_has_is_a_form_error(self):
+        response = self.client.post(
+            reverse("club:progress_update"), {"chapters_read": "31"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFormError(
+            response.context["form"],
+            "chapters_read",
+            "Piranesi is only 30 chapters long.",
+        )
+        self.assertEqual(Progress.objects.count(), 0)
+
+    def test_the_last_chapter_itself_is_accepted(self):
+        response = self.client.post(
+            reverse("club:progress_update"), {"chapters_read": "30"}
+        )
+
+        self.assertRedirects(response, reverse("club:home"))
+        self.assertEqual(Progress.objects.get().percent, 100)
+
+    def test_an_unidentified_post_is_still_refused_rather_than_redirected(self):
+        """Decision #16, guarded again now that the form has changed shape."""
+        anonymous = self.client_class()
+
+        response = anonymous.post(
+            reverse("club:progress_update"), {"chapters_read": "12"}
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Progress.objects.count(), 0)
+
+    def test_the_form_starts_from_the_chapters_last_recorded(self):
+        Progress.objects.create(book=self.book, member=self.ada, chapters_read=9)
+
+        response = self.client.get(reverse("club:progress_update"))
+
+        self.assertEqual(response.context["form"].initial["chapters_read"], 9)
+        self.assertContains(response, "You last recorded 9")
+        self.assertContains(response, "chapters")
+
+    def test_rows_come_back_furthest_along_first_in_chapters(self):
+        """`Meta.ordering` used to name `pages_read`, which on this book is a
+        column nobody writes to."""
+        bob = Member.objects.create(name="Bob")
+        behind = Progress.objects.create(
+            book=self.book, member=self.ada, chapters_read=4
+        )
+        ahead = Progress.objects.create(book=self.book, member=bob, chapters_read=22)
+
+        self.assertEqual(list(self.book.progress.all()), [ahead, behind])
+
+    def test_the_ordering_ignores_pages_recorded_before_the_measure_changed(self):
+        bob = Member.objects.create(name="Bob")
+        stale = Progress.objects.create(
+            book=self.book, member=self.ada, pages_read=431, chapters_read=0
+        )
+        recorded = Progress.objects.create(book=self.book, member=bob, chapters_read=2)
+
+        self.assertEqual(list(self.book.progress.all()), [recorded, stale])
+
+    def test_the_str_counts_in_the_books_own_unit(self):
+        progress = Progress(book=self.book, member=self.ada, chapters_read=12)
+
+        self.assertEqual(str(progress), "Ada — 12 chapters of Piranesi")
+
+
+class ProgressMeasureChangeTests(TestCase):
+    """The book that changes measure underneath the people reading it.
+
+    Decision #19: nothing recorded and a recorded zero are different sentences,
+    and so is a number recorded in a unit the club has stopped counting in.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.book = Book.objects.create(
+            title="Middlemarch",
+            author="George Eliot",
+            total_pages=880,
+            is_current=True,
+        )
+        cls.progress = Progress.objects.create(
+            book=cls.book, member=cls.ada, pages_read=431
+        )
+
+    def setUp(self):
+        session = self.client.session
+        session["member_id"] = self.ada.pk
+        session.save()
+
+    def _switch_to_chapters(self):
+        self.book.total_pages = None
+        self.book.total_chapters = 30
+        self.book.save(update_fields=["total_pages", "total_chapters"])
+
+    def test_the_recorded_pages_are_not_rewritten(self):
+        self._switch_to_chapters()
+        self.progress.refresh_from_db()
+
+        self.assertEqual(self.progress.pages_read, 431)
+        self.assertIsNone(self.progress.chapters_read)
+
+    def test_the_member_is_not_suddenly_431_chapters_in(self):
+        """The whole reason `chapters_read` is a second column."""
+        self._switch_to_chapters()
+        progress = Progress.objects.select_related("book").get()
+
+        self.assertIsNone(progress.units_read)
+        self.assertIsNone(progress.percent)
+
+    def test_re_recording_in_chapters_leaves_the_pages_alone(self):
+        self._switch_to_chapters()
+
+        self.client.post(reverse("club:progress_update"), {"chapters_read": "6"})
+
+        progress = Progress.objects.get()
+        self.assertEqual(progress.chapters_read, 6)
+        self.assertEqual(progress.pages_read, 431)
+
+    def test_a_submitted_page_count_cannot_reach_the_column(self):
+        """The field is gone, not hidden, so a hand-typed `pages_read` on a
+        chapter-measured book is ignored rather than stored."""
+        self._switch_to_chapters()
+
+        self.client.post(
+            reverse("club:progress_update"),
+            {"chapters_read": "6", "pages_read": "1"},
+        )
+
+        self.assertEqual(Progress.objects.get().pages_read, 431)
+
+
+class ProgressWithNeitherCountTests(TestCase):
+    """A book with no page count and no chapter count: the status quo."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.book = Book.objects.create(title="Untitled", author="A", is_current=True)
+
+    def setUp(self):
+        session = self.client.session
+        session["member_id"] = self.ada.pk
+        session.save()
+
+    def test_the_form_still_asks_for_pages(self):
+        response = self.client.get(reverse("club:progress_update"))
+
+        self.assertContains(response, "Pages read")
+        self.assertContains(response, "No page or chapter count is recorded")
+
+    def test_any_number_is_accepted_and_the_message_names_pages(self):
+        response = self.client.post(
+            reverse("club:progress_update"), {"pages_read": "5000"}, follow=True
+        )
+
+        self.assertEqual(Progress.objects.get().pages_read, 5000)
+        self.assertContains(response, "You are 5000 pages in.")
+
+
 class ProgressWithNoCurrentBookTests(TestCase):
     """Between reads there is nothing to record against."""
 

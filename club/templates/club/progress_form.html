@@ -10,10 +10,10 @@
     <p class="byline">by {{ book.author }}</p>
   </div>
 
-  {% if progress.pk %}
+  {% if progress.pk and progress.units_read is not None %}
     <p class="empty">
-      You last recorded {{ progress.pages_read }}
-      pages{% if book.total_pages %} — {{ progress.percent }}%{% endif %}
+      You last recorded {{ progress.units_read }}
+      {{ book.measure }}{% if progress.percent is not None %} — {{ progress.percent }}%{% endif %}
       on {{ progress.updated_on }}. Saving again replaces it.
     </p>
   {% else %}

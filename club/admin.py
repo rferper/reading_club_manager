@@ -41,6 +41,7 @@ class BookAdmin(admin.ModelAdmin):
         "finished_on",
         "rating",
         "total_pages",
+        "total_chapters",
     )
     list_filter = ("is_current",)
     search_fields = ("title", "author")

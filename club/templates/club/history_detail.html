@@ -9,7 +9,7 @@
     by {{ book.author }}
     {% if book.started_on %}· {{ book.started_on }}{% endif %}
     {% if book.finished_on %}to {{ book.finished_on }}{% endif %}
-    {% if book.total_pages %}· {{ book.total_pages }} pages{% endif %}
+    {% if book.total_units %}· {{ book.total_units }} {{ book.measure }}{% endif %}
     {% if book.rating %}· the club said {{ book.rating }} out of 5{% endif %}
   </p>
 
@@ -78,7 +78,16 @@
   <h2>How far everyone got</h2>
   {% for row in progress %}
     <p>
-      {{ row.member.name }} — {{ row.pages_read }} pages{% if row.percent is not None %}, {{ row.percent }}%{% endif %}
+      {{ row.member.name }} —
+      {% if row.units_read is not None %}
+        {{ row.units_read }} {{ book.measure }}{% if row.percent is not None %}, {{ row.percent }}%{% endif %}
+      {% else %}
+        {% comment %}
+          A row recorded in the unit this book used to be measured
+          in. Decision #19: that is nothing recorded, not a zero.
+        {% endcomment %}
+        <span class="empty">not started</span>
+      {% endif %}
     </p>
   {% empty %}
     <p class="empty">Nobody recorded any progress on this one.</p>

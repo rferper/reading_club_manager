@@ -11,7 +11,7 @@
       <p class="byline">
         by {{ book.author }}
         {% if book.started_on %}· started {{ book.started_on }}{% endif %}
-        {% if book.total_pages %}· {{ book.total_pages }} pages{% endif %}
+        {% if book.total_units %}· {{ book.total_units }} {{ book.measure }}{% endif %}
       </p>
     </div>
 

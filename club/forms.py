@@ -65,11 +65,16 @@ class IdentityForm(forms.Form):
 
 
 class ProgressForm(forms.ModelForm):
-    """How far you have read.
+    """How far you have read, in whatever the book is measured in.
 
     There is no member field and there never will be — decision #4. The view
     takes the member from the session, so this form cannot be used to post as
     somebody else, and nobody has to pick their own name twice.
+
+    One field, chosen by the book: a page-measured book asks for pages and a
+    chapter-measured one asks for chapters (#17). The other column is dropped
+    rather than hidden, so a member recording chapters cannot touch the pages
+    they recorded before the book changed measure.
 
     The upper bound belongs to the book rather than to the field, so it is
     checked here rather than declared on the model.
@@ -77,31 +82,51 @@ class ProgressForm(forms.ModelForm):
 
     class Meta:
         model = Progress
-        fields = ("pages_read",)
-        labels = {"pages_read": "Pages read"}
+        fields = ("pages_read", "chapters_read")
+        labels = {"pages_read": "Pages read", "chapters_read": "Chapters read"}
 
     def __init__(self, *args, book, **kwargs):
         super().__init__(*args, **kwargs)
         self.book = book
 
-        if book.total_pages:
-            self.fields["pages_read"].help_text = f"Out of {book.total_pages}."
-            self.fields["pages_read"].widget.attrs["max"] = book.total_pages
+        # `Book.measure` is the one place this choice is made. The field that
+        # does not apply is removed outright: `construct_instance` skips what
+        # is not in `cleaned_data`, so the other column keeps whatever it held.
+        self.unit_field = (
+            "chapters_read" if book.measure == "chapters" else "pages_read"
+        )
+        del self.fields[
+            "pages_read" if self.unit_field == "chapters_read" else "chapters_read"
+        ]
+
+        field = self.fields[self.unit_field]
+        # `chapters_read` is nullable on the model, so that a row carrying only
+        # a page count from before the measure changed reads as nothing
+        # recorded. Submitting the form is the member saying otherwise, so a
+        # blank here is a missing answer rather than an erasure.
+        field.required = True
+
+        if book.total_units:
+            field.help_text = f"Out of {book.total_units}."
+            field.widget.attrs["max"] = book.total_units
         else:
-            self.fields["pages_read"].help_text = (
-                "No page count is recorded for this book, so this shows as pages "
-                "rather than a percentage."
+            field.help_text = (
+                "No page or chapter count is recorded for this book, so this "
+                "shows as pages rather than a percentage."
             )
 
-    def clean_pages_read(self):
-        pages_read = self.cleaned_data["pages_read"]
+    def clean(self):
+        cleaned_data = super().clean()
+        units_read = cleaned_data.get(self.unit_field)
+        total = self.book.total_units
 
-        if self.book.total_pages and pages_read > self.book.total_pages:
-            raise forms.ValidationError(
-                f"{self.book.title} is only {self.book.total_pages} pages long."
+        if units_read is not None and total and units_read > total:
+            self.add_error(
+                self.unit_field,
+                f"{self.book.title} is only {total} {self.book.measure} long.",
             )
 
-        return pages_read
+        return cleaned_data
 
 
 class NoteForm(forms.ModelForm):
@@ -183,17 +208,43 @@ class BookForm(forms.ModelForm):
 
     class Meta:
         model = Book
-        fields = ("title", "author", "total_pages", "started_on")
+        fields = ("title", "author", "total_pages", "total_chapters", "started_on")
         labels = {
             "title": "Title",
             "author": "Author",
             "total_pages": "Total pages",
+            "total_chapters": "Total chapters",
             "started_on": "Started on",
         }
         help_texts = {
             "total_pages": "Optional. Without it, progress shows pages and no percentage.",
+            "total_chapters": (
+                "For a book whose pages nobody can agree on — an ebook, an "
+                "audiobook, an edition the club does not share. One or the "
+                "other, never both."
+            ),
         }
         widgets = {"started_on": forms.DateInput(attrs={"type": "date"})}
+
+    def clean(self):
+        """One denominator per book, said on the page as well as in the schema.
+
+        The `CheckConstraint` refuses this everywhere (decision #17's reason for
+        putting rules in the database), and a constraint message cannot say
+        which of the two to keep. This one can, and it attaches to the field the
+        club is most likely to be adding.
+        """
+        cleaned_data = super().clean()
+
+        if cleaned_data.get("total_pages") and cleaned_data.get("total_chapters"):
+            self.add_error(
+                "total_chapters",
+                "A book is measured in pages or in chapters, not both. Keep the "
+                "pages if the club shares an edition, and the chapters if it "
+                "does not — then clear the other.",
+            )
+
+        return cleaned_data
 
 
 class BookEditForm(BookForm):

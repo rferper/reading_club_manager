@@ -8,6 +8,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 
+from ..forms import BookEditForm, BookForm
 from ..models import Book
 
 
@@ -144,6 +145,144 @@ class BookRatingTests(TestCase):
         self.assertIsNone(book.rating)
 
 
+class BookMeasureTests(TestCase):
+    """The denominator: pages, chapters, or neither — but never both.
+
+    #17. Decision #1 says the book owns the scale everyone is compared on, and
+    a chapter count is a second way of writing that scale down, not a second
+    scale.
+    """
+
+    def test_a_book_with_a_page_count_measures_in_pages(self):
+        book = Book(title="Middlemarch", author="George Eliot", total_pages=880)
+
+        self.assertEqual(book.measure, "pages")
+        self.assertEqual(book.total_units, 880)
+
+    def test_a_book_with_a_chapter_count_measures_in_chapters(self):
+        book = Book(title="Piranesi", author="Susanna Clarke", total_chapters=30)
+
+        self.assertEqual(book.measure, "chapters")
+        self.assertEqual(book.total_units, 30)
+
+    def test_a_book_with_neither_count_measures_in_pages_and_has_no_total(self):
+        """The status quo, unchanged: raw pages, no percentage, no bound."""
+        book = Book(title="Untitled", author="A")
+
+        self.assertEqual(book.measure, "pages")
+        self.assertIsNone(book.total_units)
+
+    def test_the_percentage_divides_by_the_chapter_count(self):
+        book = Book(title="Piranesi", author="Susanna Clarke", total_chapters=30)
+
+        self.assertEqual(book.percent_of(15), 50)
+        self.assertEqual(book.percent_of(30), 100)
+
+    def test_more_chapters_than_the_book_has_is_capped_at_one_hundred(self):
+        """Decision #18, generalised rather than replaced."""
+        book = Book(title="Piranesi", author="Susanna Clarke", total_chapters=30)
+
+        self.assertEqual(book.percent_of(44), 100)
+
+    def test_a_chapter_count_of_zero_is_treated_as_no_count_at_all(self):
+        """A zero-chapter book is a typo, not a book — the same reading a
+        page count of zero has always had."""
+        book = Book(title="Zero", author="A", total_chapters=0)
+
+        self.assertEqual(book.measure, "pages")
+        self.assertIsNone(book.total_units)
+        self.assertIsNone(book.percent_of(3))
+
+    def test_both_counts_at_once_is_rejected_by_the_database(self):
+        """The house pattern from decisions #2 and #17: a fixture and a shell
+        meet the rule too, not only the form that remembered it."""
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Book.objects.create(
+                title="Both", author="A", total_pages=880, total_chapters=30
+            )
+
+    def test_both_counts_at_once_is_a_validation_error_before_that(self):
+        with self.assertRaises(ValidationError) as caught:
+            Book(
+                title="Both", author="A", total_pages=880, total_chapters=30
+            ).full_clean()
+
+        self.assertIn(
+            "A book is measured in pages or in chapters, not both.",
+            caught.exception.message_dict[NON_FIELD_ERRORS],
+        )
+
+    def test_either_count_on_its_own_is_fine(self):
+        for field, value in (("total_pages", 880), ("total_chapters", 30)):
+            with self.subTest(field=field):
+                book = Book(title=f"Book {field}", author="A", **{field: value})
+                book.full_clean()
+                book.save()
+
+    def test_no_percentage_is_stored_against_the_chapter_count_either(self):
+        field_names = {field.name for field in Book._meta.get_fields()}
+
+        self.assertIn("total_chapters", field_names)
+        self.assertNotIn("percent", field_names)
+
+
+class BookDenominatorFormTests(TestCase):
+    """The same rule, said on the page where a typo actually arrives."""
+
+    def test_the_start_form_offers_both_counts_and_explains_the_second(self):
+        form = BookForm()
+
+        self.assertIn("total_chapters", form.fields)
+        self.assertIn("nobody can agree", form.fields["total_chapters"].help_text)
+
+    def test_the_start_form_refuses_both_counts_at_once(self):
+        form = BookForm(
+            {
+                "title": "Both",
+                "author": "A",
+                "total_pages": "880",
+                "total_chapters": "30",
+                "started_on": "",
+            }
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("total_chapters", form.errors)
+        self.assertIn("pages or in chapters", str(form.errors["total_chapters"]))
+
+    def test_the_edit_form_refuses_both_counts_at_once(self):
+        book = Book.objects.create(title="Piranesi", author="A", total_chapters=30)
+        form = BookEditForm(
+            {
+                "title": "Piranesi",
+                "author": "A",
+                "total_pages": "245",
+                "total_chapters": "30",
+                "started_on": "",
+                "finished_on": "",
+                "rating": "",
+            },
+            instance=book,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("total_chapters", form.errors)
+
+    def test_a_chapter_count_on_its_own_is_accepted(self):
+        form = BookForm(
+            {
+                "title": "Piranesi",
+                "author": "Susanna Clarke",
+                "total_pages": "",
+                "total_chapters": "30",
+                "started_on": "",
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save(commit=False).total_units, 30)
+
+
 class BookAdminTests(TestCase):
     """The only place books can be entered until #14 builds start and finish."""
 
@@ -170,7 +309,7 @@ class BookAdminTests(TestCase):
         # The leading entry is Django's own action checkbox, which is here
         # because books, unlike members, may be deleted.
         self.assertEqual(
-            tuple(response.context["cl"].list_display)[-7:],
+            tuple(response.context["cl"].list_display)[-8:],
             (
                 "title",
                 "author",
@@ -179,6 +318,7 @@ class BookAdminTests(TestCase):
                 "finished_on",
                 "rating",
                 "total_pages",
+                "total_chapters",
             ),
         )
         self.assertContains(response, "Middlemarch")

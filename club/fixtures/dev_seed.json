@@ -56,6 +56,7 @@
     "title": "Piranesi",
     "author": "Susanna Clarke",
     "total_pages": 245,
+    "total_chapters": null,
     "started_on": "2026-05-04",
     "finished_on": "2026-06-22",
     "rating": 5,
@@ -69,10 +70,25 @@
     "title": "Middlemarch",
     "author": "George Eliot",
     "total_pages": 880,
+    "total_chapters": null,
     "started_on": "2026-07-06",
     "finished_on": null,
     "rating": null,
     "is_current": true
+  }
+},
+{
+  "model": "club.book",
+  "pk": 3,
+  "fields": {
+    "title": "The Left Hand of Darkness",
+    "author": "Ursula K. Le Guin",
+    "total_pages": null,
+    "total_chapters": 20,
+    "started_on": "2026-03-02",
+    "finished_on": "2026-04-19",
+    "rating": 4,
+    "is_current": false
   }
 },
 {
@@ -82,6 +98,7 @@
     "book": 1,
     "member": 1,
     "pages_read": 245,
+    "chapters_read": null,
     "updated_on": "2026-09-08T20:09:05.015Z"
   }
 },
@@ -92,6 +109,7 @@
     "book": 1,
     "member": 2,
     "pages_read": 245,
+    "chapters_read": null,
     "updated_on": "2026-09-08T20:09:05.021Z"
   }
 },
@@ -102,6 +120,7 @@
     "book": 1,
     "member": 3,
     "pages_read": 245,
+    "chapters_read": null,
     "updated_on": "2026-09-08T20:09:05.027Z"
   }
 },
@@ -112,6 +131,7 @@
     "book": 1,
     "member": 5,
     "pages_read": 198,
+    "chapters_read": null,
     "updated_on": "2026-09-08T20:09:05.032Z"
   }
 },
@@ -122,6 +142,7 @@
     "book": 2,
     "member": 1,
     "pages_read": 604,
+    "chapters_read": null,
     "updated_on": "2026-09-08T20:09:05.124Z"
   }
 },
@@ -132,6 +153,7 @@
     "book": 2,
     "member": 2,
     "pages_read": 431,
+    "chapters_read": null,
     "updated_on": "2026-09-08T20:09:05.130Z"
   }
 },
@@ -142,7 +164,41 @@
     "book": 2,
     "member": 3,
     "pages_read": 0,
+    "chapters_read": null,
     "updated_on": "2026-09-08T20:09:05.136Z"
+  }
+},
+{
+  "model": "club.progress",
+  "pk": 8,
+  "fields": {
+    "book": 3,
+    "member": 1,
+    "pages_read": 0,
+    "chapters_read": 20,
+    "updated_on": "2026-04-19T18:00:00Z"
+  }
+},
+{
+  "model": "club.progress",
+  "pk": 9,
+  "fields": {
+    "book": 3,
+    "member": 2,
+    "pages_read": 0,
+    "chapters_read": 14,
+    "updated_on": "2026-04-17T21:30:00Z"
+  }
+},
+{
+  "model": "club.progress",
+  "pk": 10,
+  "fields": {
+    "book": 3,
+    "member": 5,
+    "pages_read": 0,
+    "chapters_read": 9,
+    "updated_on": "2026-04-02T08:15:00Z"
   }
 },
 {
@@ -233,6 +289,16 @@
     "author": 3,
     "body": "Starting tonight. Please nobody say anything about Lydgate.",
     "created_on": "2026-09-01T19:00:00Z"
+  }
+},
+{
+  "model": "club.note",
+  "pk": 6,
+  "fields": {
+    "book": 3,
+    "author": 5,
+    "body": "Three of us have the paperback, one the audiobook and one a library ebook that renumbers every page. Chapters it is.",
+    "created_on": "2026-03-09T19:40:00Z"
   }
 },
 {

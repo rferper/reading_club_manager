@@ -126,6 +126,49 @@ class SeedFixtureTests(TestCase):
         )
 
 
+    def test_one_finished_book_is_measured_in_chapters(self):
+        """#17: the archive has to mix units out of the box, or a newcomer
+        sees the chapter path only by typing a book in themselves."""
+        in_chapters = Book.objects.filter(total_chapters__isnull=False)
+
+        self.assertEqual(in_chapters.count(), 1)
+        book = in_chapters.get()
+        self.assertEqual(book.measure, "chapters")
+        self.assertIsNone(book.total_pages)
+        self.assertIsNotNone(book.finished_on)
+        self.assertIs(book.is_current, False)
+
+    def test_the_archive_holds_both_measures_at_once(self):
+        finished = Book.objects.filter(is_current=False)
+
+        self.assertEqual(
+            {book.measure for book in finished}, {"pages", "chapters"}
+        )
+
+    def test_some_but_not_all_members_recorded_chapters_on_it(self):
+        book = Book.objects.get(total_chapters__isnull=False)
+        recorded = set(
+            Progress.objects.filter(
+                book=book, chapters_read__isnull=False
+            ).values_list("member_id", flat=True)
+        )
+
+        self.assertGreaterEqual(len(recorded), 2)
+        self.assertTrue(
+            {member.pk for member in Member.objects.all()} - recorded,
+            "every seeded member recorded chapters; nobody is missing",
+        )
+
+    def test_nobody_has_a_page_count_on_the_chapter_measured_book(self):
+        """A seeded page count on a chapter book would be the confusion the
+        second column exists to avoid, sitting in the demo data."""
+        book = Book.objects.get(total_chapters__isnull=False)
+
+        self.assertFalse(
+            Progress.objects.filter(book=book, pages_read__gt=0).exists()
+        )
+
+
 class SeededPagesRenderRealContentTests(TestCase):
     """Every page, with the fixture loaded, showing content and not an empty state."""
 
@@ -214,3 +257,17 @@ class SeededPagesRenderRealContentTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Progress.objects.get(member=dev).pages_read, 12)
+
+    def test_the_archive_lists_a_page_book_and_a_chapter_book_together(self):
+        response = self.client.get(reverse("club:history"))
+
+        self.assertContains(response, "245 pages")
+        self.assertContains(response, "20 chapters")
+
+    def test_the_chapter_books_entry_shows_percentages_nobody_typed(self):
+        book = Book.objects.get(total_chapters__isnull=False)
+
+        response = self.client.get(reverse("club:history_detail", args=[book.pk]))
+
+        self.assertContains(response, "chapters, 100%")
+        self.assertContains(response, "chapters, 70%")

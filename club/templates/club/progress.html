@@ -17,7 +17,7 @@
     </p>
   {% else %}
     <p class="byline">
-      {{ book.title }} by {{ book.author }}{% if book.total_pages %}, {{ book.total_pages }} pages{% endif %}
+      {{ book.title }} by {{ book.author }}{% if book.total_units %}, {{ book.total_units }} {{ book.measure }}{% endif %}
     </p>
 
     <table class="progress-table">
@@ -35,14 +35,19 @@
 
             <td>
               {% if row.has_recorded %}
-                {{ row.pages_read }}{% if book.total_pages %} of {{ book.total_pages }}{% endif %}
+                {% comment %}
+                  Never a bare count: the unit is part of the sentence,
+                  because "12" means nothing on a book measured in
+                  chapters. Design system: never a bare zero either.
+                {% endcomment %}
+                {{ row.units_read }}{% if book.total_units %} of {{ book.total_units }}{% endif %} {{ book.measure }}
               {% else %}
                 <span class="empty">not started</span>
               {% endif %}
             </td>
 
             <td>
-              {% if book.total_pages %}
+              {% if book.total_units %}
                 {% comment %}
                   The number is the content and the bar is decoration, so the
                   bar is hidden from assistive technology rather than repeated
@@ -51,7 +56,7 @@
                 <span class="progress" aria-hidden="true"><span class="progress__fill" style="width: {{ row.percent }}%"></span></span>
                 {{ row.percent }}%
               {% else %}
-                <span class="empty">no page count recorded</span>
+                <span class="empty">no page or chapter count recorded</span>
               {% endif %}
             </td>
           </tr>

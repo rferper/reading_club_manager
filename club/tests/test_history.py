@@ -706,3 +706,129 @@ class FullCycleTests(TestCase):
 
         history = self.client.get(reverse("club:history"))
         self.assertEqual(list(history.context["books"]), [first])
+
+
+class HistoryMixesMeasuresTests(TestCase):
+    """The archive holds a page-measured book and a chapter-measured one (#17).
+
+    The percentage is the one figure comparable across the two, which is
+    decision #1 doing its job — and it is still stored nowhere.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.bob = Member.objects.create(name="Bob")
+        cls.in_pages = Book.objects.create(
+            title="Middlemarch",
+            author="George Eliot",
+            total_pages=880,
+            started_on=date(2025, 1, 1),
+            finished_on=date(2025, 6, 1),
+        )
+        cls.in_chapters = Book.objects.create(
+            title="Piranesi",
+            author="Susanna Clarke",
+            total_chapters=30,
+            started_on=date(2025, 6, 2),
+            finished_on=date(2025, 8, 1),
+        )
+        Progress.objects.create(book=cls.in_pages, member=cls.ada, pages_read=440)
+        Progress.objects.create(book=cls.in_chapters, member=cls.ada, chapters_read=12)
+        Progress.objects.create(book=cls.in_chapters, member=cls.bob, chapters_read=30)
+
+    def test_the_archive_lists_both_books_each_naming_its_own_unit(self):
+        response = self.client.get(reverse("club:history"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "880 pages")
+        self.assertContains(response, "30 chapters")
+
+    def test_the_chapter_books_entry_counts_in_chapters(self):
+        response = self.client.get(
+            reverse("club:history_detail", args=[self.in_chapters.pk])
+        )
+
+        self.assertContains(response, "12 chapters, 40%")
+        self.assertNotContains(response, "12 pages")
+
+    def test_the_page_books_entry_still_counts_in_pages(self):
+        response = self.client.get(
+            reverse("club:history_detail", args=[self.in_pages.pk])
+        )
+
+        self.assertContains(response, "440 pages")
+        self.assertContains(response, "50%")
+
+    def test_a_chapter_books_progress_lists_furthest_first(self):
+        """It used to list by `pages_read`, a column nobody wrote to here."""
+        response = self.client.get(
+            reverse("club:history_detail", args=[self.in_chapters.pk])
+        )
+
+        listed = [row.member.name for row in response.context["progress"]]
+        self.assertEqual(listed, ["Bob", "Ada"])
+
+    def test_a_row_left_behind_by_a_measure_change_reads_as_not_started(self):
+        """Decision #19: 431 pages on a book now counted in chapters is
+        nothing recorded, not a zero — and the pages are still there."""
+        Progress.objects.filter(book=self.in_chapters, member=self.ada).update(
+            pages_read=431, chapters_read=None
+        )
+
+        response = self.client.get(
+            reverse("club:history_detail", args=[self.in_chapters.pk])
+        )
+
+        self.assertContains(response, "not started")
+        self.assertNotContains(response, "431")
+
+    def test_the_percentage_is_the_figure_the_two_books_share(self):
+        """Nothing stores it — both come off `Book.percent_of`."""
+        pages_row = Progress.objects.select_related("book").get(book=self.in_pages)
+        chapters_row = Progress.objects.select_related("book").get(
+            book=self.in_chapters, member=self.bob
+        )
+
+        self.assertEqual(pages_row.percent, 50)
+        self.assertEqual(chapters_row.percent, 100)
+
+    def test_starting_a_book_in_chapters_goes_through_the_same_form(self):
+        session = self.client.session
+        session["is_club_admin"] = True
+        session.save()
+
+        self.client.post(
+            reverse("club:book_start"),
+            {
+                "title": "Ancillary Justice",
+                "author": "Ann Leckie",
+                "total_pages": "",
+                "total_chapters": "26",
+                "started_on": "2025-09-01",
+            },
+        )
+
+        started = Book.objects.get(title="Ancillary Justice")
+        self.assertEqual(started.measure, "chapters")
+        self.assertIs(started.is_current, True)
+
+    def test_starting_a_book_with_both_counts_is_refused_on_the_page(self):
+        session = self.client.session
+        session["is_club_admin"] = True
+        session.save()
+
+        response = self.client.post(
+            reverse("club:book_start"),
+            {
+                "title": "Both",
+                "author": "A",
+                "total_pages": "300",
+                "total_chapters": "26",
+                "started_on": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Book.objects.filter(title="Both").exists())
+        self.assertContains(response, "pages or in chapters")
