@@ -246,3 +246,20 @@ class BookFinishForm(forms.ModelForm):
         # Nullable on the model, because a book being read has no finish date.
         # Required here, because this form is the moment it gets one.
         self.fields["finished_on"].required = True
+
+
+class MemberRatingForm(forms.Form):
+    """Your own score out of five for a book the club has finished.
+
+    A plain `Form`, like `AnswerForm` and for the same reason: the view writes
+    through `update_or_create` (the shape decision #6 settled), so there is no
+    instance to bind. Neither the member nor the book is a field — the member
+    comes from the session, the book from the URL.
+    """
+
+    score = forms.TypedChoiceField(
+        label="Your rating",
+        coerce=int,
+        choices=[(n, f"{n} out of 5") for n in range(1, 6)],
+        error_messages={"invalid_choice": "A rating runs from 1 to 5."},
+    )
