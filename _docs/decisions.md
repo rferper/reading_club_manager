@@ -106,6 +106,11 @@ Why: the plan says "optionally retained notes/rating" without saying whose. A
 per-member rating is a nicer feature and a bigger model — a whole extra table and
 an aggregate on every history row. If the club wants it, it is a v2 issue.
 
+That issue was #16, and this decision survived it. `MemberRating` sits **beside**
+`Book.rating`, not instead of it: what the club agreed on out loud when it closed
+the book is a different fact from the mean of five private opinions, and neither
+is derived from the other. See #23.
+
 ## 10. `Member.role` is a label with no behaviour
 
 Free text: "Founder", "Host", "Snack coordinator". It confers nothing.
@@ -516,3 +521,66 @@ Why: decision #7 gives an author the ability to remove a regretted note, and
 that is the whole reason posting one feels safe. Making it expire when the club
 moves on would take it away exactly when the note becomes permanent. Posting is
 what the archive refuses; removing your own words is not posting.
+
+## 23. The archive is closed to the discussion and open to the rating
+
+Settled while building per-member ratings (#16). This narrows decision #22's
+read-only rule for `/history/<pk>/`; it does not overturn it.
+
+**A finished book takes no new note, answer or progress, and does take a
+rating.** The page used to say "Read-only. Nothing here can be added to or
+changed." It now names the discussion as the thing that is closed and says
+ratings stay open.
+
+Why: the old sentence was true while everything on that page was something the
+club said *while* it was reading. A score is the opposite kind of fact — you
+cannot honestly give one until you have finished, and a finished book lives
+nowhere else in the app. Read literally, the old rule forbade the one act the
+archive exists to make possible.
+
+**The form is on `/history/<pk>/` itself; `/books/<pk>/rate/` is where it
+posts** — and also the page that renders it for a direct GET or a rejected
+score.
+
+Why: one number and a button do not need a page of their own, and a member who
+has to click through to change a 4 into a 5 will not bother. The route still
+exists because a POST needs a destination and, by the POST-then-redirect rule in
+`_docs/api.md`, a redirect cannot carry a bound form: a rejected score needs
+somewhere to come back to with its error still attached. So the archive page
+only ever renders the form unbound, and `book_rate` owns every other state of
+it. Both prefill from the same helper, so the two cannot disagree about what the
+member's standing score is.
+
+**Rating the current read is refused in the view, not merely hidden in the
+template**, and refused with a message and a redirect rather than a status code.
+
+Why: AGENTS.md — hiding a control is decoration, and this is the check that
+makes the hiding honest. A message rather than a 403 for the reason decision #18
+gives about recording progress with no current book: a 403 says the viewer is
+the wrong person, and that is not what happened. The action has momentarily
+stopped meaning anything, and the member should be told so on a page they can
+read.
+
+**The average is annotated on `/history/` and computed in Python on
+`/history/<pk>/`.** Different answers on the two pages, deliberately.
+
+Why: the archive is uncapped (decision #22), so asking each book for its own
+average would be a query per entry — `Avg` and `Count` annotations keep it at
+one, pinned by `assertNumQueries` the way decision #19 pins the progress
+overview. Aggregating also drops `Book.Meta.ordering`, so `history` now spells
+decision #17's ordering out explicitly; left alone it silently reverted to
+primary-key order, which looks plausible right up until two finish dates
+disagree. The detail page has already loaded every row to print the names beside
+the scores, so averaging them again in the database would be a second query for
+arithmetic on data already in hand.
+
+**`dev_seed.json` carries four scores on the finished book, one of them from the
+deactivated member, and leaves one member unrated.** They average 4.3 against a
+club rating of 5.
+
+Why: the fixture's job (#15) is to put the awkward states in front of a
+newcomer without anybody typing them. A seed where every member had rated, and
+where the average landed on the club's own number, would show the feature and
+hide the reason it is a second column rather than the same one — decision #9's
+point that what the club agreed out loud and what five people privately thought
+are different facts.

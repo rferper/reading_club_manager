@@ -1,0 +1,29 @@
+{% extends "club/base.html" %}
+
+{% block title %}Rate {{ book.title }} — Reading Club Manager{% endblock %}
+
+{% block content %}
+  <h1>Rate this book</h1>
+
+  <div class="panel">
+    <p class="current-book__title">{{ book.title }}</p>
+    <p class="byline">
+      by {{ book.author }}{% if book.finished_on %} · finished {{ book.finished_on }}{% endif %}
+    </p>
+  </div>
+
+  <p class="empty">
+    Your own score, out of five{% if my_rating %} — you have this one at
+    {{ my_rating.score }} today{% endif %}. The club's agreed rating is a
+    separate number the admin recorded when the book was closed. This one is
+    yours, and you can change it whenever you like.
+  </p>
+
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Save rating</button>
+  </form>
+
+  <p><a href="{% url 'club:history_detail' book.pk %}">Back to {{ book.title }}</a></p>
+{% endblock %}

@@ -412,3 +412,12 @@ button {
   cursor: pointer;
   font-size: 0.9rem;
 }
+
+/* The one form a finished book's page carries. The discussion there is closed
+   and the rating is not (decision #23), so it needs to read as a control
+   rather than as part of the archived record around it. */
+.rating-form {
+  border-top: 1px solid var(--rule);
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+}

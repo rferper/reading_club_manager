@@ -303,3 +303,54 @@ class Answer(models.Model):
         whether they differ by a real interval rather than at all.
         """
         return (self.updated_on - self.created_on).total_seconds() > 1
+
+
+class MemberRating(models.Model):
+    """One member's score out of five for one book.
+
+    Not the same thing as `Book.rating`, and not derived from it. Decision #9
+    made that a single number the club agreed on out loud when it closed the
+    book; this is what each member privately thought, and the archive shows the
+    spread beside the agreement.
+
+    One row per member per book, updated in place — the same shape decision #6
+    settled for answers, and for the same reason: a score is a standing
+    position, not a remark.
+
+    You rate a book you have finished. The view enforces that; nothing here
+    does, because a book's finished state is a fact about the book and moving
+    it is #21's problem, not a reason to invalidate everybody's scores.
+    """
+
+    book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name="ratings")
+
+    # PROTECT, for the reason in decision #20: a member who leaves the club
+    # leaves the roster, not the record. Their score stays in the average.
+    member = models.ForeignKey(
+        Member, on_delete=models.PROTECT, related_name="ratings"
+    )
+
+    score = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
+    updated_on = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = [Lower("member__name")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["book", "member"],
+                name="one_rating_per_member_per_book",
+                violation_error_message=(
+                    "You have already rated this one — change that score instead."
+                ),
+            ),
+            models.CheckConstraint(
+                condition=models.Q(score__gte=1, score__lte=5),
+                name="member_rating_1_to_5",
+                violation_error_message="A rating runs from 1 to 5.",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.member} rated {self.book.title} {self.score}"
