@@ -86,6 +86,32 @@ class CurrentBookPageTests(TestCase):
         self.assertContains(response, "Middlemarch")
         self.assertNotContains(response, "Piranesi")
 
+    def test_the_landing_page_counts_in_the_books_own_unit(self):
+        """#17: never a bare count. The byline says what 880 is 880 of."""
+        response = self.client.get(reverse("club:home"))
+
+        self.assertContains(response, "880 pages")
+
+    def test_a_chapter_measured_book_says_chapters_on_the_landing_page(self):
+        self.book.total_pages = None
+        self.book.total_chapters = 30
+        self.book.save(update_fields=["total_pages", "total_chapters"])
+
+        response = self.client.get(reverse("club:home"))
+
+        self.assertContains(response, "30 chapters")
+        self.assertNotContains(response, "30 pages")
+
+    def test_a_book_with_neither_count_says_neither(self):
+        self.book.total_pages = None
+        self.book.save(update_fields=["total_pages"])
+
+        response = self.client.get(reverse("club:home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "pages")
+        self.assertNotContains(response, "chapters")
+
     def test_a_book_with_no_start_date_recorded_says_so(self):
         self.book.started_on = None
         self.book.save(update_fields=["started_on"])
