@@ -50,7 +50,7 @@ class ProgressOverviewTests(TestCase):
 
         cleo = response.context["rows"][-1]
         self.assertEqual(cleo["member"], self.cleo)
-        self.assertEqual(cleo["pages_read"], 0)
+        self.assertEqual(cleo["units_read"], 0)
         self.assertEqual(cleo["percent"], 0)
         self.assertIs(cleo["has_recorded"], False)
         self.assertContains(response, "not started")
@@ -61,7 +61,7 @@ class ProgressOverviewTests(TestCase):
         response = self.client.get(reverse("club:progress"))
 
         cleo = response.context["rows"][-1]
-        self.assertEqual(cleo["pages_read"], 0)
+        self.assertEqual(cleo["units_read"], 0)
         self.assertIs(cleo["has_recorded"], True)
         self.assertNotContains(response, "not started")
 
@@ -109,7 +109,7 @@ class ProgressOverviewTests(TestCase):
 
         cleo = response.context["rows"][-1]
         self.assertEqual(cleo["member"], self.cleo)
-        self.assertEqual(cleo["pages_read"], 0)
+        self.assertEqual(cleo["units_read"], 0)
 
 
 class ProgressOverviewQueryCountTests(TestCase):
@@ -163,7 +163,7 @@ class ProgressOverviewNoPageCountTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "120")
-        self.assertContains(response, "no page count recorded")
+        self.assertContains(response, "no page or chapter count recorded")
         self.assertIsNone(response.context["rows"][0]["percent"])
 
     def test_no_bar_is_drawn_at_all(self):
@@ -171,6 +171,186 @@ class ProgressOverviewNoPageCountTests(TestCase):
         response = self.client.get(reverse("club:progress"))
 
         self.assertNotContains(response, "progress__fill")
+
+
+class ProgressOverviewInChaptersTests(TestCase):
+    """The same table, on a book measured in chapters (#17)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.book = Book.objects.create(
+            title="Piranesi",
+            author="Susanna Clarke",
+            total_chapters=30,
+            started_on=date(2025, 9, 1),
+            is_current=True,
+        )
+        cls.ada = Member.objects.create(name="Ada")
+        cls.bob = Member.objects.create(name="Bob")
+        cls.cleo = Member.objects.create(name="Cleo")
+
+        Progress.objects.create(book=cls.book, member=cls.ada, chapters_read=12)
+        Progress.objects.create(book=cls.book, member=cls.bob, chapters_read=30)
+
+    def _names(self, response):
+        return [row["member"].name for row in response.context["rows"]]
+
+    def test_each_count_names_its_unit_rather_than_standing_bare(self):
+        response = self.client.get(reverse("club:progress"))
+
+        self.assertContains(response, "12 of 30 chapters")
+        self.assertContains(response, "40%")
+        self.assertNotContains(response, "pages")
+
+    def test_the_byline_names_the_chapter_count(self):
+        response = self.client.get(reverse("club:progress"))
+
+        self.assertContains(response, "30 chapters")
+
+    def test_members_are_ordered_furthest_along_first(self):
+        response = self.client.get(reverse("club:progress"))
+
+        self.assertEqual(self._names(response), ["Bob", "Ada", "Cleo"])
+
+    def test_the_percentage_is_derived_from_the_chapter_count(self):
+        response = self.client.get(reverse("club:progress"))
+
+        rows = {row["member"].name: row for row in response.context["rows"]}
+        self.assertEqual(rows["Ada"]["percent"], 40)
+        self.assertEqual(rows["Bob"]["percent"], 100)
+
+    def test_a_member_with_nothing_recorded_is_not_started(self):
+        response = self.client.get(reverse("club:progress"))
+
+        cleo = response.context["rows"][-1]
+        self.assertIs(cleo["has_recorded"], False)
+        self.assertContains(response, "not started")
+
+    def test_a_recorded_zero_still_reads_differently_from_nothing_recorded(self):
+        """Decision #19, on the new column: nought chapters is a sentence."""
+        Progress.objects.create(book=self.book, member=self.cleo, chapters_read=0)
+
+        response = self.client.get(reverse("club:progress"))
+
+        cleo = response.context["rows"][-1]
+        self.assertIs(cleo["has_recorded"], True)
+        self.assertContains(response, "0 of 30 chapters")
+        self.assertNotContains(response, "not started")
+
+    def test_a_book_nobody_has_recorded_against_shows_the_roster_not_zeroes(self):
+        Progress.objects.filter(book=self.book).delete()
+
+        response = self.client.get(reverse("club:progress"))
+
+        self.assertEqual(len(response.context["rows"]), 3)
+        self.assertNotContains(response, "of 30 chapters")
+        for row in response.context["rows"]:
+            with self.subTest(member=row["member"].name):
+                self.assertIs(row["has_recorded"], False)
+
+
+class ProgressOverviewMeasureChangeTests(TestCase):
+    """The book that drops its page count and gains a chapter count."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.book = Book.objects.create(
+            title="Middlemarch",
+            author="George Eliot",
+            total_pages=880,
+            is_current=True,
+        )
+        cls.ada = Member.objects.create(name="Ada")
+        cls.bob = Member.objects.create(name="Bob")
+        Progress.objects.create(book=cls.book, member=cls.ada, pages_read=431)
+
+    def _switch_to_chapters(self):
+        self.book.total_pages = None
+        self.book.total_chapters = 30
+        self.book.save(update_fields=["total_pages", "total_chapters"])
+
+    def test_the_member_reads_as_not_started_rather_than_431_of_30(self):
+        """Nor 0 of 30: decision #19 says a recorded zero is a member saying
+        something, and this member has said nothing about chapters."""
+        self._switch_to_chapters()
+
+        response = self.client.get(reverse("club:progress"))
+
+        ada = {row["member"].name: row for row in response.context["rows"]}["Ada"]
+        self.assertIs(ada["has_recorded"], False)
+        self.assertNotContains(response, "431")
+        self.assertNotContains(response, "0 of 30")
+        self.assertContains(response, "not started")
+
+    def test_the_page_count_is_still_in_the_database(self):
+        self._switch_to_chapters()
+
+        self.client.get(reverse("club:progress"))
+
+        self.assertEqual(Progress.objects.get(member=self.ada).pages_read, 431)
+
+    def test_re_recording_in_chapters_puts_the_member_back_on_the_table(self):
+        self._switch_to_chapters()
+        Progress.objects.filter(member=self.ada).update(chapters_read=6)
+
+        response = self.client.get(reverse("club:progress"))
+
+        ada = {row["member"].name: row for row in response.context["rows"]}["Ada"]
+        self.assertIs(ada["has_recorded"], True)
+        self.assertEqual(ada["units_read"], 6)
+        self.assertEqual(ada["percent"], 20)
+
+
+class ProgressOverviewChapterQueryCountTests(TestCase):
+    """The subquery picks a column; it does not become a second query."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.book = Book.objects.create(
+            title="Piranesi",
+            author="Susanna Clarke",
+            total_chapters=30,
+            is_current=True,
+        )
+
+    def _add_members(self, count, chapters=4):
+        start = Member.objects.count()
+        for index in range(start, start + count):
+            member = Member.objects.create(name=f"Member {index:02d}")
+            Progress.objects.create(
+                book=self.book, member=member, chapters_read=chapters
+            )
+
+    def test_the_query_count_does_not_grow_with_the_roster(self):
+        self._add_members(2)
+        with self.assertNumQueries(2):
+            self.client.get(reverse("club:progress"))
+
+        self._add_members(20)
+        with self.assertNumQueries(2):
+            response = self.client.get(reverse("club:progress"))
+
+        self.assertEqual(len(response.context["rows"]), 22)
+
+
+class ProgressOverviewNeitherCountTests(TestCase):
+    """A book with no page count and no chapter count either."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.book = Book.objects.create(title="Untitled", author="A", is_current=True)
+        cls.ada = Member.objects.create(name="Ada")
+        Progress.objects.create(book=cls.book, member=cls.ada, pages_read=120)
+
+    def test_the_empty_state_names_both_counts(self):
+        response = self.client.get(reverse("club:progress"))
+
+        self.assertContains(response, "no page or chapter count recorded")
+
+    def test_the_count_is_still_shown_with_its_unit(self):
+        response = self.client.get(reverse("club:progress"))
+
+        self.assertContains(response, "120 pages")
 
 
 class ProgressOverviewEmptyStatesTests(TestCase):

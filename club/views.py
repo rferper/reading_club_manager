@@ -283,13 +283,13 @@ def progress_update(request):
 
     if request.method == "POST" and form.is_valid():
         progress = form.save()
+        # Never a bare count: the unit is part of the sentence, because "12"
+        # means nothing on a book measured in chapters or in anything else.
+        counted = f"You are {progress.units_read} {book.measure} in"
         if progress.percent is None:
-            messages.success(request, f"You are {progress.pages_read} pages in.")
+            messages.success(request, f"{counted}.")
         else:
-            messages.success(
-                request,
-                f"You are {progress.pages_read} pages in — {progress.percent}%.",
-            )
+            messages.success(request, f"{counted} — {progress.percent}%.")
         return redirect("club:home")
 
     return render(
@@ -303,35 +303,46 @@ def progress_overview(request):
     """Who is ahead and who is behind on the current book.
 
     One query for the roster, whatever its size: each active member is
-    annotated with their own `pages_read` through a subquery rather than
-    walking `member.progress` per row. `assertNumQueries` pins that.
+    annotated with their own count through a subquery rather than walking
+    `member.progress` per row. `assertNumQueries` pins that.
+
+    The subquery selects the column this book is measured in (#17), which is
+    one column either way — not a second query, and not a property asked per
+    row. A member whose only recorded number is in the other column reads as
+    not started, which is the truth: nobody has said how far they are in the
+    unit the club is now counting.
 
     A member with nothing recorded is annotated `None`, which is not the same
-    as a recorded zero — the page says "not started" for one and "0 pages" for
-    the other — but both sort to the bottom and neither is left out.
+    as a recorded zero — the page says "not started" for one and "0 of 880
+    pages" for the other — but both sort to the bottom and neither is left out.
     """
     book = Book.objects.current()
     rows = []
 
     if book is not None:
+        unit_column = "chapters_read" if book.measure == "chapters" else "pages_read"
         members = (
             Member.objects.filter(is_active=True)
             .annotate(
-                recorded_pages=Subquery(
-                    Progress.objects.filter(
-                        member=OuterRef("pk"), book=book
-                    ).values("pages_read")[:1]
+                recorded_units=Subquery(
+                    Progress.objects.filter(member=OuterRef("pk"), book=book)
+                    # `Progress.Meta.ordering` joins to the book to decide what
+                    # "furthest" means; one row per member per book makes it
+                    # meaningless here, so it is cleared rather than carried
+                    # into the subquery.
+                    .order_by()
+                    .values(unit_column)[:1]
                 )
             )
-            .order_by(F("recorded_pages").desc(nulls_last=True), Lower("name"))
+            .order_by(F("recorded_units").desc(nulls_last=True), Lower("name"))
         )
 
         rows = [
             {
                 "member": member,
-                "pages_read": member.recorded_pages or 0,
-                "percent": book.percent_of(member.recorded_pages or 0),
-                "has_recorded": member.recorded_pages is not None,
+                "units_read": member.recorded_units or 0,
+                "percent": book.percent_of(member.recorded_units or 0),
+                "has_recorded": member.recorded_units is not None,
             }
             for member in members
         ]
@@ -636,7 +647,10 @@ def history_detail(request, pk):
             "questions": book.questions.prefetch_related(
                 Prefetch("answers", queryset=Answer.objects.select_related("member"))
             ),
-            "progress": book.progress.select_related("member"),
+            # The book comes along because every row prints its count in the
+            # book's own unit and asks the book for its percentage; without it
+            # that is a query per member.
+            "progress": book.progress.select_related("member", "book"),
             "ratings": ratings,
             # Averaged here rather than in the database, because the rows are
             # already loaded to be listed underneath it.
