@@ -5,7 +5,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, models, transaction
-from django.db.models import F, OuterRef, Prefetch, Subquery
+from django.db.models import Avg, Count, F, OuterRef, Prefetch, Subquery
 from django.db.models.functions import Lower
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -22,12 +22,21 @@ from .forms import (
     BookForm,
     IdentityForm,
     MemberForm,
+    MemberRatingForm,
     NoteForm,
     ProgressForm,
     QuestionForm,
 )
 from .identity import current_member, forget_member, remember_member
-from .models import Answer, Book, Member, Note, Progress, Question
+from .models import (
+    Answer,
+    Book,
+    Member,
+    MemberRating,
+    Note,
+    Progress,
+    Question,
+)
 
 
 def home(request):
@@ -574,21 +583,49 @@ def history(request):
     Uncapped, and staying that way — a club reads a dozen books a year, and
     #20 holds search and pagination for whenever that stops being true.
     """
-    return render(
-        request,
-        "club/history.html",
-        {"books": Book.objects.filter(is_current=False)},
+    books = (
+        Book.objects.filter(is_current=False)
+        .annotate(
+            # Annotated rather than asked per row: the archive is uncapped, so
+            # a property that averaged in Python would be one query per entry.
+            member_rating_average=Avg("ratings__score"),
+            member_rating_count=Count("ratings"),
+        )
+        # Spelled out rather than inherited. Aggregating drops `Meta.ordering`,
+        # which turned the archive back into primary key order the moment the
+        # averages were added — silently, because both orders look plausible
+        # until the dates disagree.
+        .order_by(
+            F("finished_on").desc(nulls_last=True),
+            F("started_on").desc(nulls_last=True),
+            "-pk",
+        )
     )
+
+    return render(request, "club/history.html", {"books": books})
 
 
 def history_detail(request, pk):
-    """One book's discussion, replayed read-only.
+    """One book's discussion, replayed read-only — except the rating.
 
     This works because notes, questions and answers carried a book foreign key
     from the start (decision #8) rather than being scoped to whatever happened
-    to be current. Nothing here writes, and nothing here is offered to write.
+    to be current. Nothing about the discussion writes, and nothing about it is
+    offered to write.
+
+    The rating is the exception decision #23 carves out: you rate a book once
+    you have finished it, and this page is the only place a finished book
+    lives. The form posts to `book_rate`, which re-checks everything this view
+    decided before showing it.
     """
     book = get_object_or_404(Book, pk=pk)
+    viewer = current_member(request)
+    ratings = list(book.ratings.select_related("member"))
+    scores = [rating.score for rating in ratings]
+    my_rating = next(
+        (r for r in ratings if viewer is not None and r.member_id == viewer.pk),
+        None,
+    )
 
     return render(
         request,
@@ -600,6 +637,20 @@ def history_detail(request, pk):
                 Prefetch("answers", queryset=Answer.objects.select_related("member"))
             ),
             "progress": book.progress.select_related("member"),
+            "ratings": ratings,
+            # Averaged here rather than in the database, because the rows are
+            # already loaded to be listed underneath it.
+            "rating_average": sum(scores) / len(scores) if scores else None,
+            "my_rating": my_rating,
+            # Unbound and prefilled from the row this member already has, so
+            # the control shows their standing score rather than asking again
+            # from blank. Absent entirely when there is nobody to attribute a
+            # score to, or nothing finished to score.
+            "rating_form": (
+                MemberRatingForm(initial=_rating_initial(my_rating))
+                if viewer is not None and not book.is_current
+                else None
+            ),
         },
     )
 
@@ -699,4 +750,57 @@ def book_edit(request, pk):
             "heading": f"Edit {book.title}",
             "submit_label": "Save changes",
         },
+    )
+
+
+def _rating_initial(rating):
+    """Prefill data for `MemberRatingForm` from an existing row, or nothing.
+
+    One helper because two views prefill the same form: the archive page, which
+    renders it inline, and `book_rate`, which renders it again when a submission
+    comes back with an error or somebody arrives at the URL directly.
+    """
+    return {"score": rating.score} if rating is not None else None
+
+
+@require_member
+def book_rate(request, pk):
+    """Record this member's score for a book the club has finished.
+
+    The archive is read-only for discussion and not for this (decision #23):
+    you rate a book once you have read it, and the history page is the only
+    place a finished book lives. That page posts here; this view is also the
+    GET-and-error surface, so a failed submission comes back somewhere with a
+    form on it rather than losing the score on a redirect.
+
+    The current read is refused — the club has not finished it, and a score for
+    a book somebody is halfway through is not a score. Refused here and not
+    only hidden there: a hidden control is decoration.
+    """
+    book = get_object_or_404(Book, pk=pk)
+
+    if book.is_current:
+        messages.error(
+            request,
+            f"The club is still reading {book.title}. Rate it once it is finished.",
+        )
+        return redirect("club:history_detail", pk=book.pk)
+
+    member = current_member(request)
+    mine = MemberRating.objects.filter(book=book, member=member).first()
+    form = MemberRatingForm(request.POST or None, initial=_rating_initial(mine))
+
+    if request.method == "POST" and form.is_valid():
+        MemberRating.objects.update_or_create(
+            book=book,
+            member=member,
+            defaults={"score": form.cleaned_data["score"]},
+        )
+        messages.success(request, f"Your rating for {book.title} is saved.")
+        return redirect("club:history_detail", pk=book.pk)
+
+    return render(
+        request,
+        "club/book_rate.html",
+        {"form": form, "book": book, "my_rating": mine},
     )

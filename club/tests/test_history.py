@@ -113,7 +113,7 @@ class FinishBookTests(TestCase):
         response = self.client.get(reverse("club:history"))
 
         self.assertContains(response, "Middlemarch")
-        self.assertContains(response, "rated 4 out of 5")
+        self.assertContains(response, "the club said 4 out of 5")
 
     def test_the_finish_form_offers_today_as_the_date(self):
         response = self.client.get(self.url)
@@ -231,13 +231,20 @@ class FinishedBookIsReadOnlyTests(TestCase):
         self.assertRedirects(response, reverse("club:home"))
         self.assertEqual(Progress.objects.count(), 0)
 
-    def test_the_archive_page_offers_no_form_at_all(self):
+    def test_the_archive_page_closes_the_discussion(self):
+        """Narrowed by #16: ratings stay open, because you rate a book once you
+        have finished it. Nothing that adds to the discussion does."""
         response = self.client.get(
             reverse("club:history_detail", args=[self.book.pk])
         )
 
-        self.assertContains(response, "Read-only")
-        self.assertNotContains(response, "<form")
+        self.assertContains(response, "The discussion is closed")
+        self.assertNotContains(response, "Post note")
+        self.assertNotContains(response, "Post answer")
+        self.assertNotContains(response, "Edit your answer")
+        # Nothing to type into. The rating form is a set of five scores, and
+        # every way of adding to the discussion is a body of text.
+        self.assertNotContains(response, "<textarea")
 
 
 class StartBookTests(TestCase):
@@ -370,12 +377,13 @@ class HistoryListTests(TestCase):
         response = self.client.get(reverse("club:history"))
 
         self.assertContains(response, "Susanna Clarke")
-        self.assertContains(response, "rated 5 out of 5")
+        self.assertContains(response, "the club said 5 out of 5")
 
     def test_a_book_with_no_rating_says_nothing_about_one(self):
         response = self.client.get(reverse("club:history"))
 
-        self.assertNotContains(response, "rated 0")
+        self.assertNotContains(response, "the club said 0")
+        self.assertNotContains(response, "members averaged 0")
 
     def test_a_book_with_no_finish_date_says_so_rather_than_going_blank(self):
         Book.objects.create(title="Abandoned", author="Nobody")

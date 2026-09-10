@@ -25,7 +25,11 @@
         {% else %}
           · no finish date recorded
         {% endif %}
-        {% if book.rating %}· rated {{ book.rating }} out of 5{% endif %}
+        {% if book.rating %}· the club said {{ book.rating }} out of 5{% endif %}
+        {% if book.member_rating_count %}
+          · members averaged {{ book.member_rating_average|floatformat:1 }}
+          from {{ book.member_rating_count }}
+        {% endif %}
       </p>
 
       {% if is_club_admin %}

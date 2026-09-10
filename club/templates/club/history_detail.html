@@ -10,7 +10,7 @@
     {% if book.started_on %}· {{ book.started_on }}{% endif %}
     {% if book.finished_on %}to {{ book.finished_on }}{% endif %}
     {% if book.total_pages %}· {{ book.total_pages }} pages{% endif %}
-    {% if book.rating %}· rated {{ book.rating }} out of 5{% endif %}
+    {% if book.rating %}· the club said {{ book.rating }} out of 5{% endif %}
   </p>
 
   {% if book.is_current %}
@@ -22,8 +22,9 @@
     </p>
   {% else %}
     <p class="empty">
-      Read-only. Nothing here can be added to or changed — the archive is the
-      record of what the club actually said at the time.
+      The discussion is closed. Notes, questions and answers are the record of
+      what the club said at the time, and nothing can be added to them now.
+      Ratings stay open — you rate a book once you have finished it.
     </p>
   {% endif %}
 
@@ -31,6 +32,47 @@
     <p>
       <a class="admin-only" href="{% url 'club:book_edit' book.pk %}">Edit this entry</a>
     </p>
+  {% endif %}
+
+  <h2>Ratings</h2>
+  {% if rating_average %}
+    <p>
+      Members averaged {{ rating_average|floatformat:1 }} out of 5,
+      from {{ ratings|length }}
+      {% if ratings|length == 1 %}rating{% else %}ratings{% endif %}.
+    </p>
+
+    {% for rating in ratings %}
+      <p class="byline">{{ rating.member.name }} — {{ rating.score }} out of 5</p>
+    {% endfor %}
+  {% else %}
+    <p class="empty">
+      Nobody has rated this one yet{% if book.is_current %} — the club is still reading it{% endif %}.
+    </p>
+  {% endif %}
+
+  {% if not book.is_current %}
+    {% if rating_form %}
+      {% comment %}
+        The one form on a finished book's page. The discussion is closed and
+        this is not (decision #23), so it posts here rather than sending the
+        member off to a separate page to type one number. `book_rate` renders
+        that page for a GET or a rejected score, and re-checks everything this
+        template decided before showing the form.
+      {% endcomment %}
+      <form class="rating-form" method="post" action="{% url 'club:book_rate' book.pk %}">
+        {% csrf_token %}
+        {{ rating_form.as_p }}
+        <button type="submit">
+          {% if my_rating %}Change your rating{% else %}Rate this book{% endif %}
+        </button>
+      </form>
+    {% else %}
+      <p class="empty">
+        <a href="{% url 'club:identify' %}?next={{ request.get_full_path|urlencode }}">Say who you are</a>
+        to add your own rating.
+      </p>
+    {% endif %}
   {% endif %}
 
   <h2>How far everyone got</h2>
