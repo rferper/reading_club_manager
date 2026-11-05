@@ -1,0 +1,41 @@
+{% extends "club/base.html" %}
+
+{% block title %}Delete a book — Reading Club Manager{% endblock %}
+
+{% block content %}
+  <h1>Delete this book?</h1>
+
+  <div class="panel">
+    <p><strong>{{ book.title }}</strong></p>
+    <p class="byline">by {{ book.author }}{% if book.is_current %} · the current read{% endif %}</p>
+  </div>
+
+  {% if phrases %}
+    <p class="empty">Deleting this book also deletes:</p>
+    <ul>
+      {% for phrase in phrases %}
+        <li>{{ phrase }}</li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty">Nothing else is attached to this book, so nothing else goes with it.</p>
+  {% endif %}
+
+  <p class="empty">
+    This cannot be undone. Whatever is listed above is other people's writing,
+    and it does not come back. No member is removed.
+  </p>
+
+  <form class="admin-only" method="post">
+    {% csrf_token %}
+    <button type="submit">Delete the book and everything attached</button>
+  </form>
+
+  <p>
+    {% if book.is_current %}
+      <a href="{% url 'club:home' %}">Keep it</a>
+    {% else %}
+      <a href="{% url 'club:history_detail' book.pk %}">Keep it</a>
+    {% endif %}
+  </p>
+{% endblock %}

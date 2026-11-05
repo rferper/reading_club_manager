@@ -1300,3 +1300,27 @@ not count as active.
 **Cost.** The years add one query, so the page is two queries whatever the number of books
 or years (#19, #23), pinned in `test_history.py`. The earlier one-query pins in
 `test_history.py` and `test_ratings.py` were raised to two.
+
+## 45. Deleting a book cascades, with an honest count on the confirmation page
+
+**Issue:** #38.
+
+**Rule.** An admin may delete any book, the current read and archived or rated ones included, at
+`/books/<pk>/delete/`. Nothing blocks it: every foreign key that hangs off a book is CASCADE
+(progress and its entries, notes and their replies and reactions, questions and their answers and
+answer replies, member scores). The PROTECT foreign keys all point at Member (#3, #20), so they
+only ever stop a member being deleted, never a book. No Member is touched.
+
+**Why not refuse unless empty.** That would send the admin back to /admin/ for exactly the case
+this exists for, a mistaken book someone already posted on, and would be a second rule enforced
+only in one view while the schema and the admin cascade anyway.
+
+**The safeguard.** GET renders a confirmation that counts what goes with the book (zero lines
+omitted, "nothing else is attached" when bare) and changes nothing. POST deletes inside
+`transaction.atomic()`, re-checks the admin flag in the view (#14, #16), and redirects to `/` for
+the current read (the empty between-reads state, #2) or to `/history/` otherwise. The success
+message carries the same totals. The read-only archive rule (#23) is about member input, not
+admin removal.
+
+**Not done.** No soft delete, undo or audit trail, and no type-the-title friction. The link is on
+`/` and `/history/<pk>/` only, not on the `/history/` list. File an issue if the club ever wants undo.
