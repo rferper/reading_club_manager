@@ -1210,3 +1210,33 @@ Row order is unchanged.
 
 **Not done here.** An admin edit that changes `Progress` leaves no entry, so it can show
 as movement without a dot on the trail (#51). Unit conversion is #49.
+
+
+## 42. An "Agree" reaction on top-level notes: one per member, a toggle, current book only
+
+**Issue:** #33.
+
+**Shape.** `Reaction(note, member, created_on)` with a database `UniqueConstraint` on
+(note, member). The one control is a toggle: Agree adds the row, Undo agree removes it,
+so a double submit leaves 0 or 1 row and never an error page. Notes are still immutable
+(#7); a reaction is a separate row, not an edit.
+
+**Who and what.** Only top-level notes of the *current* book can be agreed with. A reply,
+a missing note or a note on a finished book writes nothing and redirects to `/notes/` with
+a message (#18, #23, #28). A member may agree with their own note: no rule against it,
+and a rule would be one more thing to explain. Unidentified POSTs get the identity gate's
+403 (#16); a GET is a 405.
+
+**Members.** A deactivated member's reaction still counts (#3), but their stale session is
+unidentified and cannot react. `member` is PROTECT (as #20), so a member who has reacted
+cannot be deleted. `note` is CASCADE: removing a note removes its reactions, and the
+"also removes N replies" message does not mention them.
+
+**Cost.** The count is a `Count("reactions")` annotation. Aggregating drops
+`Meta.ordering`, so the order `("-created_on", "-pk")` is spelled out (#23). The viewer's
+own reacted note ids are one extra query (a set), so the notes page stays at 7 queries at
+any number of notes, pinned in `test_reactions.py`.
+
+**Accepted.** Reacting from a `?chapter=N` view returns to the unfiltered `/notes/`.
+Other reaction types (#55), who reacted (#56), reactions on answers (#57) and on replies
+or in the archive (#58) are not done here.

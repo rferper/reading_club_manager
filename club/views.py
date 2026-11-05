@@ -47,6 +47,7 @@ from .models import (
     Progress,
     ProgressEntry,
     Question,
+    Reaction,
 )
 
 
@@ -644,10 +645,20 @@ def _top_level_notes(book):
     their authors, so the query count does not grow with the thread (decision
     #19). A reply is never a top-level row, so it is never listed twice.
     """
-    return book.notes.filter(parent__isnull=True).select_related("author").prefetch_related(
-        Prefetch(
-            "replies",
-            queryset=Note.objects.select_related("author").order_by("created_on", "pk"),
+    # `agree_count` is a Count annotation (decision #42). Aggregating drops
+    # `Meta.ordering`, so the order is spelled out again (decision #23).
+    return (
+        book.notes.filter(parent__isnull=True)
+        .select_related("author")
+        .annotate(agree_count=Count("reactions"))
+        .order_by("-created_on", "-pk")
+        .prefetch_related(
+            Prefetch(
+                "replies",
+                queryset=Note.objects.select_related("author").order_by(
+                    "created_on", "pk"
+                ),
+            )
         )
     )
 
@@ -665,6 +676,17 @@ def _render_notes(request, form, reply_form=None):
     top_level = _top_level_notes(book) if book else []
     if book and chapter is not None:
         top_level = top_level.filter(chapter=chapter)
+
+    # One query for every note this viewer agrees with, never one per note.
+    agreed_ids = (
+        set(
+            Reaction.objects.filter(member=viewer, note__book=book).values_list(
+                "note_id", flat=True
+            )
+        )
+        if viewer is not None and book is not None
+        else set()
+    )
 
     for note in top_level:
         replies = list(note.replies.all())
@@ -688,6 +710,8 @@ def _render_notes(request, form, reply_form=None):
                 "note": note,
                 "may_remove": note.may_be_removed_by(viewer, viewer_is_admin),
                 "reply_count": len(replies),
+                "agree_count": note.agree_count,
+                "agreed": note.pk in agreed_ids,
                 "replies": [
                     {"note": r, "may_remove": r.may_be_removed_by(viewer, viewer_is_admin)}
                     for r in replies
@@ -827,6 +851,36 @@ def note_delete(request, pk):
         messages.success(request, f"Note removed, and {reply_count} {noun} with it.")
     else:
         messages.success(request, "Note removed.")
+    return redirect("club:notes")
+
+
+@require_POST
+@require_member
+def note_react(request, pk):
+    """Toggle the viewer's "Agree" on a top-level note of the current book.
+
+    Re-checks the target here; hiding the button is cosmetic. Anything that is
+    not a top-level note on the current book writes nothing and sends the
+    viewer back to the notes with a message (decisions #18, #23, #28, #42).
+    `require_POST` is outermost, so a GET is a 405 whatever the session holds.
+    """
+    book = Book.objects.current()
+    note = Note.objects.filter(pk=pk, parent__isnull=True, book=book).first()
+
+    if book is None or note is None:
+        messages.error(
+            request,
+            "Only a top-level note on the current book can be agreed with.",
+        )
+        return redirect("club:notes")
+
+    member = current_member(request)
+    deleted, _ = Reaction.objects.filter(note=note, member=member).delete()
+    if not deleted:
+        # A double submit that races past the filter hits the constraint;
+        # get_or_create absorbs it and leaves exactly one row.
+        Reaction.objects.get_or_create(note=note, member=member)
+
     return redirect("club:notes")
 
 

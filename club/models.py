@@ -597,6 +597,32 @@ class Note(models.Model):
         return bool(is_admin or (member is not None and member.pk == self.author_id))
 
 
+class Reaction(models.Model):
+    """One member's "Agree" on one top-level note (decision #42).
+
+    One row per member per note, enforced in the database. Toggling adds or
+    removes the row. CASCADE from the note, which it only decorates; PROTECT
+    on the member, as for notes (decision #3, #20), so deactivated members'
+    reactions keep counting.
+    """
+
+    note = models.ForeignKey(Note, on_delete=models.CASCADE, related_name="reactions")
+    member = models.ForeignKey(
+        Member, on_delete=models.PROTECT, related_name="reactions"
+    )
+    created_on = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["note", "member"], name="one_reaction_per_member_per_note"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.member} agrees with note {self.note_id}"
+
+
 class Question(models.Model):
     """A discussion prompt the admin posts against a book.
 

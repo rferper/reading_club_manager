@@ -2,7 +2,7 @@ from django import forms
 from django.contrib import admin
 
 from .duration import MinutesField, format_minutes
-from .models import Book, Member, Note, Progress, Question
+from .models import Book, Member, Note, Progress, Question, Reaction
 
 
 @admin.register(Member)
@@ -112,3 +112,9 @@ class NoteAdmin(admin.ModelAdmin):
 class QuestionAdmin(admin.ModelAdmin):
     list_display = ("text", "book", "chapter", "position")
     list_select_related = ("book",)
+
+
+@admin.register(Reaction)
+class ReactionAdmin(admin.ModelAdmin):
+    list_display = ("note", "member", "created_on")
+    list_select_related = ("note", "member")
