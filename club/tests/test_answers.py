@@ -8,7 +8,7 @@ from django.db.models import ProtectedError
 from django.test import TestCase
 from django.urls import reverse
 
-from ..models import Answer, Book, Member, Question
+from ..models import Answer, AnswerReply, Book, Member, Question
 
 
 class AnswerModelTests(TestCase):
@@ -253,9 +253,14 @@ class AnswersOnThePageTests(TestCase):
             question = Question.objects.create(
                 book=self.book, text=f"Question {index}", position=index
             )
-            Answer.objects.create(question=question, member=self.ada, body="Yes")
+            answer = Answer.objects.create(
+                question=question, member=self.ada, body="Yes"
+            )
+            AnswerReply.objects.create(answer=answer, author=self.bob, body="Same")
 
-        with self.assertNumQueries(3):
+        # Four: the current book, the questions, their answers, and one nested
+        # prefetch for every answer's replies (decision #19, then #43).
+        with self.assertNumQueries(4):
             response = self.client.get(reverse("club:questions"))
 
         self.assertEqual(len(response.context["rows"]), 7)
@@ -265,16 +270,21 @@ class AnswersOnThePageTests(TestCase):
         `ModelChoiceField`. One shared queryset, evaluated never — a hidden
         input renders no choices."""
         for index in range(2, 8):
-            Question.objects.create(
+            question = Question.objects.create(
                 book=self.book, text=f"Question {index}", position=index
             )
+            answer = Answer.objects.create(
+                question=question, member=self.bob, body="Yes"
+            )
+            AnswerReply.objects.create(answer=answer, author=self.ada, body="Same")
         session = self.client.session
         session["member_id"] = self.ada.pk
         session.save()
 
-        # Five: the session, the current book, the viewer's member row, the
-        # questions, and one prefetch for all of their answers.
-        with self.assertNumQueries(5):
+        # Six: the session, the current book, the viewer's member row, the
+        # questions, one prefetch for all of their answers, and one nested
+        # prefetch for all of those answers' replies.
+        with self.assertNumQueries(6):
             response = self.client.get(reverse("club:questions"))
 
         self.assertEqual(len(response.context["rows"]), 7)

@@ -10,7 +10,7 @@ the JSON parses.
 from django.test import TestCase
 from django.urls import reverse
 
-from ..models import Answer, Book, Member, MemberRating, Note, Progress, ProgressEntry, Question
+from ..models import Answer, AnswerReply, Book, Member, MemberRating, Note, Progress, ProgressEntry, Question
 
 
 class SeedFixtureTests(TestCase):
@@ -82,6 +82,13 @@ class SeedFixtureTests(TestCase):
 
         self.assertTrue(replies.filter(book__is_current=True).exists())
         self.assertTrue(replies.filter(book__is_current=False).exists())
+        for reply in replies:
+            reply.full_clean()
+
+    def test_an_answer_on_the_current_book_has_replies(self):
+        replies = AnswerReply.objects.filter(answer__question__book__is_current=True)
+
+        self.assertTrue(replies.exists())
         for reply in replies:
             reply.full_clean()
 

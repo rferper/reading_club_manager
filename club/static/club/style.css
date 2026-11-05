@@ -431,6 +431,28 @@ button {
   width: 100%;
 }
 
+/* A reply to an answer: same indent and rule as a reply to a note. */
+.answer-reply,
+.answer-reply-form {
+  margin-left: 1.5rem;
+}
+
+.answer-reply {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.75rem;
+}
+
+.answer-reply__byline {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.answer-reply-form textarea {
+  width: 100%;
+}
+
 /* Questions --------------------------------------------------------------- */
 
 .question__text {

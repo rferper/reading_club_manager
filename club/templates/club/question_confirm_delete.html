@@ -13,6 +13,10 @@
   <p class="empty">
     Removing this question also removes every answer the club wrote to it.
     That is other people's writing, and it does not come back.
+    {% if reply_count %}
+      It also removes the {{ reply_count }} repl{{ reply_count|pluralize:"y,ies" }}
+      to those answers.
+    {% endif %}
   </p>
 
   <form class="admin-only" method="post">
