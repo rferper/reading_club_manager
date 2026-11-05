@@ -1180,3 +1180,33 @@ newest is removed is #51.
 **No confirmation page.** The button is a POST form with CSRF that redirects back to the
 trail with a message, like removing a note. Refusals that are a missing step (finished
 book, newest entry) redirect with a message; acting on someone else's trail is a 403.
+
+
+## 41. "This week" on the overview: a 7-day window, a baseline rule, and three phrasings
+
+Settled while building #32. The window length is provisional; #53 may revise it.
+
+**The window.** `RECENT_DAYS = 7` in `club/views.py`, the 7 days before now. One named
+constant: no setting, no form field, no query parameter.
+
+**Movement.** The member's current count on the current book minus a baseline, in the
+unit the book is counted in now. Baseline = the newest in-unit `ProgressEntry` recorded
+at or before the window start; if there is none, the oldest in-unit entry inside the
+window. Entries in another unit are ignored, never converted (decision #27, and #49).
+The percentage is percentage points: `Book.percent_of()` on both ends (decision #19),
+left out when the book has no total.
+
+**Wording.** A change reads "+40 pages, +40%" (minutes through `format_minutes`, so
+"+1h 5m"); a decrease keeps its minus ("-30 pages, -10%"); no colour or arrow. Zero
+movement reads "no change this week", never "+0". A member whose only in-unit entry is
+inside the window reads "first entry this week", with no invented delta. When the count
+moved but the whole percent did not, the count is shown alone rather than "+0%". A
+member with nothing recorded in the book's unit, or a count with no in-unit entry behind
+it, gets a dash: no movement at all.
+
+**Cost.** The newest-before, oldest-inside and entry-count lookups are correlated
+subqueries on the existing roster query. The page stays at 2 queries at any roster size.
+Row order is unchanged.
+
+**Not done here.** An admin edit that changes `Progress` leaves no entry, so it can show
+as movement without a dot on the trail (#51). Unit conversion is #49.

@@ -1,12 +1,13 @@
 """The group overview: who is ahead, who is behind, and who has not started."""
 
 import re
-from datetime import date
+from datetime import date, timedelta
 
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
-from ..models import Book, Member, Progress
+from ..models import Book, Member, Progress, ProgressEntry
 
 
 class ProgressOverviewTests(TestCase):
@@ -570,7 +571,7 @@ class ProgressOverviewNotStartedCellTests(TestCase):
                     ["Ada", "Bob", "Cleo"],
                 )
 
-                cleo_count, cleo_pct = self._cells(response, "Cleo")
+                cleo_count, cleo_pct, _movement = self._cells(response, "Cleo")
                 self.assertIn("not started", cleo_count)
                 self.assertNotIn("0%", cleo_pct)
                 self.assertNotIn("progress__fill", cleo_pct)
@@ -578,12 +579,12 @@ class ProgressOverviewNotStartedCellTests(TestCase):
                 self.assertTrue(cleo_pct.strip())
                 self.assertIn('class="empty"', cleo_pct)
 
-                bob_count, bob_pct = self._cells(response, "Bob")
+                bob_count, bob_pct, _movement = self._cells(response, "Bob")
                 self.assertIn(zero_text, bob_count)
                 self.assertIn("0%", bob_pct)
                 self.assertIn("width: 0%", bob_pct)
 
-                ada_count, ada_pct = self._cells(response, "Ada")
+                ada_count, ada_pct, _movement = self._cells(response, "Ada")
                 self.assertIn("50%", ada_pct)
                 self.assertIn('aria-hidden="true"', ada_pct)
 
@@ -652,3 +653,234 @@ class PagesReadNullOverviewTests(TestCase):
         members = [p.member.name for p in Progress.objects.select_related("member")]
 
         self.assertEqual(members, ["Bob", "Ada"])
+
+
+class ProgressOverviewMovementTests(TestCase):
+    """The "This week" cell (#32): the current count minus a baseline.
+
+    `recorded_on` is `auto_now_add`, so every entry is back-dated with
+    `.update()`. Offsets are whole days and never within a day of the 7-day
+    boundary, so a coarse clock tick cannot tie.
+    """
+
+    def setUp(self):
+        self.book = Book.objects.create(
+            title="Middlemarch", author="George Eliot", total_pages=100, is_current=True
+        )
+        self.ada = Member.objects.create(name="Ada")
+
+    def _trail(self, member, *steps, book=None):
+        """Record (days_ago, count) steps oldest first; the last is current."""
+        book = book or self.book
+        column = book.unit_column
+        progress = Progress.objects.create(
+            book=book, member=member, **{column: steps[-1][1]}
+        )
+        for days_ago, count in steps:
+            entry = ProgressEntry.objects.create(progress=progress, **{column: count})
+            ProgressEntry.objects.filter(pk=entry.pk).update(
+                recorded_on=timezone.now() - timedelta(days=days_ago)
+            )
+        return progress
+
+    def _row(self, name="Ada"):
+        response = self.client.get(reverse("club:progress"))
+        self.response = response
+        return {r["member"].name: r for r in response.context["rows"]}[name]
+
+    def _switch_book(self, **fields):
+        Book.objects.filter(pk=self.book.pk).update(is_current=False)
+        return Book.objects.create(is_current=True, **fields)
+
+    def test_a_climb_from_20_to_60_percent_reads_as_plus_40_pages_and_percent(self):
+        self._trail(self.ada, (10, 20), (2, 60))
+
+        self._row()
+
+        self.assertContains(self.response, "+40 pages, +40%")
+        self.assertContains(self.response, "This week")
+
+    def test_chapters_are_counted_in_chapters(self):
+        book = self._switch_book(title="Piranesi", author="S", total_chapters=30)
+        self._trail(self.ada, (10, 6), (2, 12), book=book)
+
+        self._row()
+
+        self.assertContains(self.response, "+6 chapters, +20%")
+
+    def test_minutes_go_through_format_minutes_and_the_raw_count_is_hidden(self):
+        book = self._switch_book(title="Audio", author="A", total_minutes=600)
+        self._trail(self.ada, (10, 100), (2, 165), book=book)
+
+        self._row()
+
+        self.assertContains(self.response, "+1h 5m, +11%")
+        self.assertNotContains(self.response, "+65")
+
+    def test_a_decrease_keeps_its_minus(self):
+        self._trail(self.ada, (10, 60), (2, 30))
+
+        self._row()
+
+        self.assertContains(self.response, "-30 pages, -30%")
+
+    def test_the_baseline_is_the_newest_entry_at_or_before_the_window_start(self):
+        self._trail(self.ada, (20, 5), (9, 30), (3, 50), (1, 70))
+
+        self._row()
+
+        self.assertContains(self.response, "+40 pages, +40%")
+
+    def test_with_nothing_before_the_window_the_oldest_in_window_entry_is_the_baseline(self):
+        self._trail(self.ada, (5, 10), (3, 25), (1, 40))
+
+        self._row()
+
+        self.assertContains(self.response, "+30 pages, +30%")
+
+    def test_entries_all_before_the_window_read_as_no_change_this_week(self):
+        self._trail(self.ada, (20, 10), (12, 40))
+
+        self._row()
+
+        self.assertContains(self.response, "no change this week")
+        self.assertNotContains(self.response, "+0")
+
+    def test_a_climb_and_a_return_inside_the_window_is_no_change(self):
+        self._trail(self.ada, (10, 40), (3, 60), (1, 40))
+
+        self._row()
+
+        self.assertContains(self.response, "no change this week")
+
+    def test_a_single_entry_inside_the_window_is_a_first_entry_with_no_delta(self):
+        self._trail(self.ada, (2, 25))
+
+        self._row()
+
+        self.assertContains(self.response, "first entry this week")
+        self.assertNotContains(self.response, "+25")
+
+    def test_a_single_entry_before_the_window_is_no_change_not_first_entry(self):
+        self._trail(self.ada, (12, 25))
+
+        self._row()
+
+        self.assertContains(self.response, "no change this week")
+        self.assertNotContains(self.response, "first entry")
+
+    def test_nothing_recorded_shows_no_movement_and_keeps_no_progress_yet(self):
+        row = self._row()
+
+        self.assertIs(row["has_recorded"], False)
+        self.assertIsNone(row["movement"])
+        self.assertContains(self.response, "no progress yet")
+        self.assertNotContains(self.response, "no change this week")
+        self.assertNotContains(self.response, "first entry")
+        self.assertNotContains(self.response, "progress__fill")
+
+    def test_a_recorded_zero_with_no_change_reads_no_change_this_week(self):
+        self._trail(self.ada, (10, 0))
+
+        self._row()
+
+        self.assertContains(self.response, "no change this week")
+
+    def test_entries_in_the_old_unit_alone_show_no_movement(self):
+        progress = self._trail(self.ada, (10, 20), (2, 60))
+        Book.objects.filter(pk=self.book.pk).update(total_pages=None, total_chapters=30)
+
+        row = self._row()
+
+        self.assertIs(row["has_recorded"], False)
+        self.assertIsNone(row["movement"])
+        self.assertNotContains(self.response, "+40")
+        self.assertTrue(progress.entries.exists())
+
+    def test_old_unit_entries_are_ignored_when_new_unit_entries_exist(self):
+        progress = self._trail(self.ada, (10, 20), (2, 60))
+        Book.objects.filter(pk=self.book.pk).update(total_pages=None, total_chapters=30)
+        for days_ago, count in ((9, 3), (1, 9)):
+            entry = ProgressEntry.objects.create(progress=progress, chapters_read=count)
+            ProgressEntry.objects.filter(pk=entry.pk).update(
+                recorded_on=timezone.now() - timedelta(days=days_ago)
+            )
+        Progress.objects.filter(pk=progress.pk).update(chapters_read=9)
+
+        self._row()
+
+        self.assertContains(self.response, "+6 chapters, +20%")
+        self.assertNotContains(self.response, "+40")
+
+    def test_a_book_with_no_total_shows_the_count_movement_without_a_percentage(self):
+        Book.objects.filter(pk=self.book.pk).update(total_pages=None)
+        self._trail(self.ada, (10, 20), (2, 60))
+
+        self._row()
+
+        self.assertContains(self.response, "+40 pages")
+        self.assertNotContains(self.response, "%")
+
+    def test_row_order_is_unchanged_by_movement(self):
+        bob = Member.objects.create(name="Bob")
+        Member.objects.create(name="Cleo")
+        self._trail(self.ada, (10, 10), (2, 20))
+        self._trail(bob, (10, 70), (2, 50))
+
+        response = self.client.get(reverse("club:progress"))
+
+        names = [r["member"].name for r in response.context["rows"]]
+        self.assertEqual(names, ["Bob", "Ada", "Cleo"])
+
+    def test_another_members_entries_do_not_leak_into_the_baseline(self):
+        bob = Member.objects.create(name="Bob")
+        self._trail(bob, (10, 90), (2, 95))
+        self._trail(self.ada, (10, 20), (2, 30))
+
+        self._row()
+
+        self.assertContains(self.response, "+10 pages, +10%")
+        self.assertContains(self.response, "+5 pages, +5%")
+
+    def test_no_current_book_has_no_movement_column(self):
+        Book.objects.filter(pk=self.book.pk).update(is_current=False)
+
+        response = self.client.get(reverse("club:progress"))
+
+        self.assertContains(response, "No book in progress")
+        self.assertNotContains(response, "This week")
+
+
+class ProgressOverviewMovementQueryCountTests(TestCase):
+    """Baselines come from subqueries in the roster query, not per row."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.book = Book.objects.create(
+            title="Middlemarch", author="George Eliot", total_pages=880, is_current=True
+        )
+
+    def _add_members(self, count):
+        start = Member.objects.count()
+        for index in range(start, start + count):
+            member = Member.objects.create(name=f"Member {index:02d}")
+            progress = Progress.objects.create(
+                book=self.book, member=member, pages_read=300 + index
+            )
+            for days_ago, pages in ((20, 50), (9, 100), (5, 150), (2, 300 + index)):
+                entry = ProgressEntry.objects.create(progress=progress, pages_read=pages)
+                ProgressEntry.objects.filter(pk=entry.pk).update(
+                    recorded_on=timezone.now() - timedelta(days=days_ago)
+                )
+
+    def test_the_query_count_stays_two_at_two_and_at_twenty_two_members(self):
+        self._add_members(2)
+        with self.assertNumQueries(2):
+            self.client.get(reverse("club:progress"))
+
+        self._add_members(20)
+        with self.assertNumQueries(2):
+            response = self.client.get(reverse("club:progress"))
+
+        self.assertEqual(len(response.context["rows"]), 22)
+        self.assertContains(response, "pages, +")

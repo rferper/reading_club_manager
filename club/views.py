@@ -375,6 +375,50 @@ def progress_update(request):
     )
 
 
+# How far back "this week" on the overview reaches (decision #41). One named
+# constant: not a setting, a form field or a query parameter. #53 may revise it.
+RECENT_DAYS = 7
+
+
+def _movement(book, member):
+    """What the "This week" cell says for one annotated member, or ``None``.
+
+    ``None`` when there is nothing to say: nothing recorded in the book's
+    unit, or a count with no in-unit entry behind it (an admin edit leaves no
+    dot - #51). Otherwise a ``(kind, text)`` pair: ``"first"`` when the only
+    in-unit entry is inside the window, ``"same"`` when the count is where the
+    baseline left it, ``"change"`` with the signed text. The baseline is the
+    newest entry at or before the window start, else the oldest inside it.
+    The percentage is `Book.percent_of()` on both ends, as percentage points,
+    and is left out when the book has no total or the points did not move.
+    """
+    if member.recorded_units is None:
+        return None
+
+    baseline = member.baseline_before
+    if baseline is None:
+        baseline = member.baseline_inside
+
+    if baseline is None:
+        return None
+
+    if member.baseline_before is None and member.entry_count == 1:
+        return {"kind": "first", "text": "first entry this week"}
+
+    change = member.recorded_units - baseline
+    if change == 0:
+        return {"kind": "same", "text": "no change this week"}
+
+    text = book.describe_change(change)
+    points = None
+    if book.percent_of(baseline) is not None:
+        points = book.percent_of(member.recorded_units) - book.percent_of(baseline)
+    if points:
+        text += f", {'+' if points > 0 else '-'}{abs(points)}%"
+
+    return {"kind": "change", "text": text}
+
+
 def progress_overview(request):
     """Who is ahead and who is behind on the current book.
 
@@ -391,12 +435,26 @@ def progress_overview(request):
     A member with nothing recorded is annotated `None`, which is not the same
     as a recorded zero — the page says "not started" for one and "0 of 880
     pages" for the other — but both sort to the bottom and neither is left out.
+
+    The "This week" cell (#32, decision #41) is three more correlated
+    subqueries on the same roster query, over the member's in-unit
+    `ProgressEntry` rows: the newest entry at or before the window start, the
+    oldest one inside it, and how many in-unit entries there are. Still two
+    queries for the page, whatever the roster or the length of any trail.
     """
     book = Book.objects.current()
     rows = []
 
     if book is not None:
         unit_column = book.unit_column
+        window_start = timezone.now() - datetime.timedelta(days=RECENT_DAYS)
+        # Only entries in the unit the book is counted in now (decision #27);
+        # the rest are ignored, never converted.
+        entries = ProgressEntry.objects.filter(
+            progress__member=OuterRef("pk"),
+            progress__book=book,
+            **{f"{unit_column}__isnull": False},
+        )
         members = (
             Member.objects.filter(is_active=True)
             .annotate(
@@ -408,7 +466,23 @@ def progress_overview(request):
                     # into the subquery.
                     .order_by()
                     .values(unit_column)[:1]
-                )
+                ),
+                baseline_before=Subquery(
+                    entries.filter(recorded_on__lte=window_start)
+                    .order_by("-recorded_on", "-pk")
+                    .values(unit_column)[:1]
+                ),
+                baseline_inside=Subquery(
+                    entries.filter(recorded_on__gt=window_start)
+                    .order_by("recorded_on", "pk")
+                    .values(unit_column)[:1]
+                ),
+                entry_count=Subquery(
+                    entries.order_by()
+                    .values("progress")
+                    .annotate(total=Count("pk"))
+                    .values("total")[:1]
+                ),
             )
             .order_by(F("recorded_units").desc(nulls_last=True), Lower("name"))
         )
@@ -425,6 +499,7 @@ def progress_overview(request):
                     else book.percent_of(member.recorded_units)
                 ),
                 "has_recorded": member.recorded_units is not None,
+                "movement": _movement(book, member),
             }
             for member in members
         ]
