@@ -43,12 +43,12 @@ route that is not here.
 | `/questions/<pk>/edit/` | `question_edit` | GET, POST | Admin | Edit or reorder a question; the optional `chapter` can be set, changed or cleared | #12, #26 | Built |
 | `/questions/<pk>/delete/` | `question_delete` | GET, POST | Admin | Remove a question and its answers | #12 | Built |
 | `/history/` | `history` | GET | Public | Every book that is not the current read, newest finished first, uncapped. Optional `?q=`: case-insensitive substring search of title and author, every whitespace-separated word must match one of them; blank `q` is the full list; `q` is trimmed and cut at 200 characters; read-only, no state changes | #14, #20 | Built |
-| `/history/<pk>/` | `history_detail` | GET | Public | One book: its progress, notes (with their replies beneath, read-only), answers and every member's score. The discussion is read-only; an identified member also gets a rating form here, posting to `book_rate` | #14, #16 | Built |
+| `/history/<pk>/` | `history_detail` | GET | Public | One book: its progress, notes (with their replies beneath, read-only), answers and every member's score. The discussion is read-only; an identified member also gets a rating form here, posting to `book_rate`, only when the book has a finish date | #14, #16 | Built |
 | `/books/start/` | `book_start` | GET, POST | Admin | Start a new current book | #14 | Built |
 | `/books/<pk>/edit/` | `book_edit` | GET, POST | Admin | Edit a book's metadata | #14 | Built |
 | `/books/<pk>/finish/` | `book_finish` | GET, POST | Admin | Record finish date and rating; clear the current flag | #14 | Built |
 | `/books/<pk>/reopen/` | `book_reopen` | GET, POST | Admin | Make a finished book the current read again. GET renders a confirmation page (and says so when another book is current); POST sets `is_current` and clears `finished_on`, keeping rating, scores and the whole discussion, then redirects to `/` with a message. Refused with a message while another book is current. Current or unknown pk is a 404. Linked from `/history/<pk>/` for admins | #21 | Built |
-| `/books/<pk>/rate/` | `book_rate` | GET, POST | Member | Your own score of 1-5 on a finished book: GET the form, POST to save. Posted from the form on `/history/<pk>/`; renders its own page for a direct GET or a rejected score. Refuses the current read with a message | #16 | Built |
+| `/books/<pk>/rate/` | `book_rate` | GET, POST | Member | Your own score of 1-5 on a finished book: GET the form, POST to save. Posted from the form on `/history/<pk>/`; renders its own page for a direct GET or a rejected score. Refuses the current read ("still reading") and any book with no finish date ("no finish date yet") with a message and a redirect, GET or POST; stored scores on such a book are kept | #16, #27 | Built |
 | `/books/<pk>/progress/<member_pk>/` | `progress_trail` | GET | Public | One member's trail through one book: every number they recorded, newest first, dated, in the unit the book is measured in now, with the percentage and the change from the entry before. Unknown book or member is a 404. Linked from `/progress/` and `/history/<pk>/` | #18 | Built |
 
 ## Conventions
@@ -74,7 +74,8 @@ route that is not here.
   Posting a note or an answer against a book that is no longer current is
   refused even though the URL exists. `/books/<pk>/rate/` is the one exception,
   narrowed in decision #23 — you rate a book once you have finished it — and it
-  refuses the mirror image, the book the club is still reading. An unidentified
+  refuses the mirror image, the book the club is still reading, and a book with
+  no finish date (decision #36). An unidentified
   POST there is a 403 like everywhere else, and the current-read refusal is a
   redirect with a message rather than a status code: it says the action has
   stopped meaning anything, not that the viewer is the wrong person.

@@ -1065,3 +1065,30 @@ their own progress and nothing is hidden from anyone. Spoiler gating is held for
 
 Out: filtering questions by chapter, grouping the notes page by chapter, chapters on
 answers.
+
+
+## 36. Finished means dated and not current
+
+Settled while building #27.
+
+**One definition.** A book is finished when `is_current` is false and `finished_on`
+is set (`Book.is_finished`, a property; no migration). Rating hangs on it, in the
+view and the template both, so they cannot drift.
+
+**Why.** Decision #23 rationale is that you rate a book you have finished. Decision
+#22 lists a book with no finish date on `/history/` so an admin can see and fix it,
+not to make it rateable. Reading "finished" as only "not current" let an abandoned
+book collect scores the club never earned. An admin sets the date in `/admin/` or
+on the book edit form, and rating then opens with no other change.
+
+**Behaviour.** `book_rate` refuses an undated non-current book, GET or POST, with a
+message that names the book and says it has no finish date yet, and a redirect to
+`/history/<pk>/` (a redirect with a message, as for the current read, decision #23).
+The current read keeps its "still reading" message, even if `finished_on` is set on
+it. The archive page shows no rating form or link for an undated book, to an
+identified viewer or a stranger alike, and says ratings open once it has a date. An
+unidentified POST is still a 403 (decision #16).
+
+**Kept.** Scores already stored against an undated book are not deleted and still show
+in the ratings list and averages. Decision #22 (listing) and decision #30 (reopen
+clears `finished_on`, scores stay dormant) are unchanged.
