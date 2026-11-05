@@ -30,6 +30,13 @@
       <ul class="errorlist">{% for error in reply_target_error %}<li>{{ error }}</li>{% endfor %}</ul>
     {% endif %}
 
+    {% if chapter_filter %}
+      <p class="byline">
+        Showing only notes on chapter {{ chapter_filter }}.
+        <a href="{% url 'club:notes' %}">Show all notes</a>
+      </p>
+    {% endif %}
+
     {% for row in rows %}
       <div class="panel note">
         {% comment %}
@@ -39,7 +46,7 @@
         {{ row.note.body|linebreaks }}
 
         <div class="byline note__byline">
-          <span>{{ row.note.author.name }} · {{ row.note.created_on }}</span>
+          <span>{{ row.note.author.name }} · {{ row.note.created_on }}{% if row.note.chapter %} · <a href="{% url 'club:notes' %}?chapter={{ row.note.chapter }}">Chapter {{ row.note.chapter }}</a>{% endif %}</span>
 
           {% if row.may_remove %}
             <form method="post" action="{% url 'club:note_delete' row.note.pk %}">
@@ -76,7 +83,12 @@
       {% endif %}
     {% empty %}
       <p class="empty">
-        No notes on {{ book.title }} yet — the first one can be yours.
+        {% if chapter_filter %}
+          No notes on chapter {{ chapter_filter }} of {{ book.title }} yet —
+          the first one can be yours.
+        {% else %}
+          No notes on {{ book.title }} yet — the first one can be yours.
+        {% endif %}
       </p>
     {% endfor %}
   {% endif %}

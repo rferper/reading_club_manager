@@ -528,7 +528,21 @@ def notes(request):
     if request.method == "POST":
         return _post_note(request)
 
-    return _render_notes(request, NoteForm())
+    return _render_notes(request, NoteForm(book=Book.objects.current()))
+
+
+def _chapter_filter(request):
+    """The `?chapter=` value as a positive int, or None (decision #35).
+
+    Missing, blank, junk, decimal, zero and negative all mean no filter.
+    """
+    raw = request.GET.get("chapter", "").strip()
+
+    if not raw.isascii() or not raw.isdigit():
+        return None
+
+    value = int(raw)
+    return value if value >= 1 else None
 
 
 def _top_level_notes(book):
@@ -555,7 +569,12 @@ def _render_notes(request, form, reply_form=None):
     # model rather than re-derived in the template. The button is decoration
     # either way — `note_delete` asks the same question again.
     rows = []
-    for note in _top_level_notes(book) if book else []:
+    chapter = _chapter_filter(request)
+    top_level = _top_level_notes(book) if book else []
+    if book and chapter is not None:
+        top_level = top_level.filter(chapter=chapter)
+
+    for note in top_level:
         replies = list(note.replies.all())
 
         # Only the form that was submitted comes back bound, so an error shows
@@ -598,6 +617,7 @@ def _render_notes(request, form, reply_form=None):
             "rows": rows,
             "form": form,
             "reply_target_error": reply_target_error,
+            "chapter_filter": chapter,
         },
     )
 
@@ -620,7 +640,7 @@ def _post_note(request):
     if "parent" in request.POST:
         return _post_reply(request, book)
 
-    form = NoteForm(request.POST)
+    form = NoteForm(request.POST, book=book)
 
     if not form.is_valid():
         return _render_notes(request, form)
@@ -767,7 +787,9 @@ def question_add(request):
         return redirect("club:home")
 
     last = book.questions.aggregate(models.Max("position"))["position__max"] or 0
-    form = QuestionForm(request.POST or None, initial={"position": last + 1})
+    form = QuestionForm(
+        request.POST or None, initial={"position": last + 1}, book=book
+    )
 
     if request.method == "POST" and form.is_valid():
         question = form.save(commit=False)
@@ -792,7 +814,7 @@ def question_add(request):
 def question_edit(request, pk):
     """Reword a question, or move it in the sequence."""
     question = get_object_or_404(Question, pk=pk)
-    form = QuestionForm(request.POST or None, instance=question)
+    form = QuestionForm(request.POST or None, instance=question, book=question.book)
 
     if request.method == "POST" and form.is_valid():
         form.save()

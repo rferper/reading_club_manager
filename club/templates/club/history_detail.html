@@ -101,7 +101,7 @@
   {% for note in notes %}
     <div class="panel note">
       {{ note.body|linebreaks }}
-      <p class="byline">{{ note.author.name }} · {{ note.created_on }}</p>
+      <p class="byline">{{ note.author.name }} · {{ note.created_on }}{% if note.chapter %} · Chapter {{ note.chapter }}{% endif %}</p>
     </div>
     {% for reply in note.replies.all %}
       <div class="panel note reply">
@@ -117,6 +117,7 @@
   {% for question in questions %}
     <div class="panel question">
       <p class="question__text">{{ question.text|linebreaksbr }}</p>
+      {% if question.chapter %}<p class="byline">Chapter {{ question.chapter }}</p>{% endif %}
 
       {% for answer in question.answers.all %}
         <div class="answer">

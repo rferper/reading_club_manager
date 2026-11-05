@@ -141,7 +141,53 @@ class ProgressForm(forms.ModelForm):
         return cleaned_data
 
 
-class NoteForm(forms.ModelForm):
+class ChapterField(forms.IntegerField):
+    """An optional chapter number: a whole number, 1 or more.
+
+    Django's `IntegerField` quietly accepts "2.0" as 2; a decimal is a typo
+    here, so any point is refused (decision #35).
+    """
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("required", False)
+        kwargs.setdefault("min_value", 1)
+        kwargs.setdefault("label", "Chapter")
+        kwargs.setdefault("help_text", "Optional. Leave blank if it is about the whole book.")
+        super().__init__(**kwargs)
+        self.error_messages["invalid"] = "Enter a whole chapter number, 1 or more."
+        self.error_messages["min_value"] = "Enter a whole chapter number, 1 or more."
+
+    def to_python(self, value):
+        if isinstance(value, str) and "." in value:
+            raise forms.ValidationError(self.error_messages["invalid"], code="invalid")
+
+        return super().to_python(value)
+
+
+class ChapterBoundMixin:
+    """Refuses a chapter above the book's declared `total_chapters`.
+
+    A book measured in pages or minutes has no chapter count, so any positive
+    chapter passes. The book is passed in because it is never a form field.
+    """
+
+    def __init__(self, *args, book=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.book = book
+
+    def clean_chapter(self):
+        chapter = self.cleaned_data.get("chapter")
+        total = self.book.total_chapters if self.book is not None else None
+
+        if chapter is not None and total and chapter > total:
+            raise forms.ValidationError(
+                f"{self.book.title} has {total} chapters, so the chapter can be at most {total}."
+            )
+
+        return chapter
+
+
+class NoteForm(ChapterBoundMixin, forms.ModelForm):
     """A thought about the current book.
 
     Body only. The author comes from the session and the book from what the
@@ -150,11 +196,15 @@ class NoteForm(forms.ModelForm):
 
     Django's form field strips surrounding whitespace, so a body of spaces
     arrives as "" and fails `required` without any check of its own.
+
+    `chapter` is optional and only on a new top-level note (decision #35).
     """
+
+    chapter = ChapterField()
 
     class Meta:
         model = Note
-        fields = ("body",)
+        fields = ("body", "chapter")
         labels = {"body": "Your note"}
         widgets = {
             "body": forms.Textarea(
@@ -197,7 +247,7 @@ class ReplyForm(forms.ModelForm):
         error_messages = {"body": {"required": "A reply needs something in it."}}
 
 
-class QuestionForm(forms.ModelForm):
+class QuestionForm(ChapterBoundMixin, forms.ModelForm):
     """A discussion prompt, and where it sits in the sequence.
 
     Admin-only. The book comes from what the club is reading, not from the
@@ -205,9 +255,11 @@ class QuestionForm(forms.ModelForm):
     submitter choose it.
     """
 
+    chapter = ChapterField()
+
     class Meta:
         model = Question
-        fields = ("text", "position")
+        fields = ("text", "position", "chapter")
         labels = {"text": "Question", "position": "Position"}
         widgets = {"text": forms.Textarea(attrs={"rows": 3})}
         error_messages = {"text": {"required": "A question needs something in it."}}
