@@ -285,21 +285,20 @@ class Progress(models.Model):
     decision #19's distinction — nothing recorded and a recorded zero are
     different sentences — applied to a case it did not anticipate.
 
-    It is nullable where ``pages_read`` defaults to zero, and that difference is
-    the distinction itself. On a book that has always been measured in pages,
-    the row's existence is what says somebody recorded something. On a book that
-    changed measure, the row is already there and says nothing about chapters —
-    so null means "not recorded in chapters" and zero means "I have the book and
-    I am on chapter nought", which are the two sentences decision #19 keeps
-    apart. Nothing rewrites ``pages_read`` to match; a book changing measure the
-    other way is #21's conversion, not this column's problem.
+    Every count column is nullable (decision #39, which amends #25's first
+    cut): null means "nothing recorded in this unit" and zero means "I have the
+    book and I am on nought", which are the two sentences decision #19 keeps
+    apart. Nothing rewrites one column to match another; converting a recorded
+    number between units is #49, not these columns' problem.
     """
 
     book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name="progress")
     member = models.ForeignKey(
         Member, on_delete=models.CASCADE, related_name="progress"
     )
-    pages_read = models.PositiveIntegerField(default=0)
+    # Nullable like the other two (decision #39): NULL is nothing recorded in
+    # pages, 0 is a recorded zero.
+    pages_read = models.PositiveIntegerField(null=True, blank=True)
     chapters_read = models.PositiveIntegerField(null=True, blank=True)
 
     # Whole minutes listened, nullable for the same reason as `chapters_read`

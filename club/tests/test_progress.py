@@ -317,7 +317,7 @@ class ChapterProgressTests(TestCase):
         self.assertRedirects(response, reverse("club:home"))
         progress = Progress.objects.get()
         self.assertEqual(progress.chapters_read, 12)
-        self.assertEqual(progress.pages_read, 0)
+        self.assertIsNone(progress.pages_read)
 
     def test_the_message_names_the_unit_rather_than_a_bare_count(self):
         response = self.client.post(
@@ -1211,3 +1211,191 @@ class EmptyProgressPostTests(TestCase):
         self.assertFormError(response.context["form"], "pages_read", "This field is required.")
         self.assertEqual(Progress.objects.count(), 0)
         self.assertEqual(ProgressEntry.objects.count(), 0)
+
+
+class PagesReadNullableTests(TestCase):
+    """#29: `pages_read` follows the same rule as the other two columns.
+
+    NULL is nothing recorded in pages; 0 is a recorded zero (decision #19).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.chapter_book = Book.objects.create(
+            title="Middlemarch",
+            author="George Eliot",
+            total_chapters=30,
+            is_current=True,
+        )
+
+    def setUp(self):
+        session = self.client.session
+        session["member_id"] = self.ada.pk
+        session.save()
+
+    def _to_pages(self):
+        Book.objects.filter(pk=self.chapter_book.pk).update(
+            total_chapters=None, total_minutes=None, total_pages=400
+        )
+
+    def test_a_bare_progress_stores_null_pages(self):
+        progress = Progress.objects.create(book=self.chapter_book, member=self.ada)
+
+        progress.refresh_from_db()
+        self.assertIsNone(progress.pages_read)
+
+    def test_a_row_made_through_the_chapter_form_leaves_pages_null(self):
+        self.client.post(reverse("club:progress_update"), {"chapters_read": "6"})
+
+        progress = Progress.objects.get()
+        self.assertEqual(progress.chapters_read, 6)
+        self.assertIsNone(progress.pages_read)
+
+    def test_a_row_made_through_the_minutes_form_leaves_pages_null(self):
+        Book.objects.filter(pk=self.chapter_book.pk).update(
+            total_chapters=None, total_minutes=600
+        )
+
+        self.client.post(reverse("club:progress_update"), {"minutes_read": "1h 30m"})
+
+        progress = Progress.objects.get()
+        self.assertEqual(progress.minutes_read, 90)
+        self.assertIsNone(progress.pages_read)
+
+    def test_chapters_hand_posted_to_a_page_book_are_ignored(self):
+        self._to_pages()
+
+        self.client.post(
+            reverse("club:progress_update"),
+            {"pages_read": "50", "chapters_read": "9"},
+        )
+
+        progress = Progress.objects.get()
+        self.assertEqual(progress.pages_read, 50)
+        self.assertIsNone(progress.chapters_read)
+
+    def test_pages_hand_posted_to_a_chapter_book_are_ignored(self):
+        Progress.objects.create(book=self.chapter_book, member=self.ada, pages_read=77)
+
+        self.client.post(
+            reverse("club:progress_update"),
+            {"chapters_read": "4", "pages_read": "1"},
+        )
+
+        progress = Progress.objects.get()
+        self.assertEqual(progress.chapters_read, 4)
+        self.assertEqual(progress.pages_read, 77)
+
+    def test_a_posted_page_zero_is_stored_as_a_zero(self):
+        self._to_pages()
+
+        self.client.post(reverse("club:progress_update"), {"pages_read": "0"})
+
+        self.assertEqual(Progress.objects.get().pages_read, 0)
+
+    def test_the_form_shows_its_empty_state_for_a_null_page_count(self):
+        Progress.objects.create(
+            book=self.chapter_book, member=self.ada, chapters_read=12
+        )
+        self._to_pages()
+
+        response = self.client.get(reverse("club:progress_update"))
+
+        self.assertContains(response, "You have not recorded anything on this one yet")
+        self.assertNotContains(response, "0 pages")
+
+    def test_the_form_reports_a_recorded_page_zero(self):
+        self._to_pages()
+        Progress.objects.create(book=self.chapter_book, member=self.ada, pages_read=0)
+
+        response = self.client.get(reverse("club:progress_update"))
+
+        self.assertContains(response, "You last recorded")
+
+    def test_a_row_with_every_count_null_does_not_break_the_pages(self):
+        Progress.objects.create(book=self.chapter_book, member=self.ada)
+        self._to_pages()
+
+        urls = (
+            reverse("club:progress"),
+            reverse("club:progress_update"),
+            reverse("club:progress_trail", args=[self.chapter_book.pk, self.ada.pk]),
+        )
+        for url in urls:
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 200)
+
+
+class NullPagesMigrationTests(TestCase):
+    """Migration 0015: a stray default zero becomes NULL, a real zero stays."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.book = Book.objects.create(
+            title="Middlemarch", author="George Eliot", total_pages=400
+        )
+        cls.members = [Member.objects.create(name=n) for n in "ABCDEF"]
+
+    def setUp(self):
+        self.migration = import_module("club.migrations.0015_pages_read_nullable")
+        self.schema = SimpleNamespace(connection=connection)
+
+    def _row(self, member, **counts):
+        return Progress.objects.create(book=self.book, member=member, **counts)
+
+    def _forwards(self):
+        self.migration.null_unrecorded_pages(global_apps, self.schema)
+
+    def test_a_chapter_row_with_the_default_zero_becomes_null(self):
+        row = self._row(self.members[0], pages_read=0, chapters_read=12)
+
+        self._forwards()
+
+        row.refresh_from_db()
+        self.assertIsNone(row.pages_read)
+        self.assertEqual(row.chapters_read, 12)
+
+    def test_a_minutes_row_with_the_default_zero_becomes_null(self):
+        row = self._row(self.members[1], pages_read=0, minutes_read=90)
+
+        self._forwards()
+
+        row.refresh_from_db()
+        self.assertIsNone(row.pages_read)
+
+    def test_a_page_only_zero_is_left_alone(self):
+        row = self._row(self.members[2], pages_read=0)
+
+        self._forwards()
+
+        row.refresh_from_db()
+        self.assertEqual(row.pages_read, 0)
+
+    def test_a_zero_with_a_page_entry_on_its_trail_is_left_alone(self):
+        row = self._row(self.members[3], pages_read=0, chapters_read=3)
+        ProgressEntry.objects.create(progress=row, pages_read=0)
+
+        self._forwards()
+
+        row.refresh_from_db()
+        self.assertEqual(row.pages_read, 0)
+
+    def test_a_real_page_count_is_left_alone(self):
+        row = self._row(self.members[4], pages_read=120, chapters_read=3)
+
+        self._forwards()
+
+        row.refresh_from_db()
+        self.assertEqual(row.pages_read, 120)
+
+    def test_reversing_writes_zero_back_for_every_null(self):
+        converted = self._row(self.members[0], pages_read=None, chapters_read=12)
+        kept = self._row(self.members[1], pages_read=55)
+
+        self.migration.restore_zero_pages(global_apps, self.schema)
+
+        converted.refresh_from_db()
+        kept.refresh_from_db()
+        self.assertEqual(converted.pages_read, 0)
+        self.assertEqual(kept.pages_read, 55)

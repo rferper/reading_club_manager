@@ -1122,3 +1122,46 @@ class HistoryDetailNotStartedTests(TestCase):
 
         self.assertContains(response, "not started")
         self.assertNotContains(response, "0%")
+
+
+class HistoryDetailNullPagesTests(TestCase):
+    """#29: a NULL page count on a page-measured archived book is nothing recorded."""
+
+    def setUp(self):
+        self.book = Book.objects.create(
+            title="Middlemarch",
+            author="George Eliot",
+            total_pages=333,
+            started_on=date(2025, 6, 1),
+            finished_on=date(2025, 7, 1),
+        )
+        self.ada = Member.objects.create(name="Ada")
+        self.bob = Member.objects.create(name="Bob")
+        self.cleo = Member.objects.create(name="Cleo")
+
+    def _get(self):
+        return self.client.get(reverse("club:history_detail", args=[self.book.pk]))
+
+    def test_a_null_page_count_shows_not_started_and_no_percent(self):
+        Progress.objects.create(book=self.book, member=self.ada, chapters_read=12)
+
+        response = self._get()
+
+        self.assertContains(response, "not started")
+        self.assertNotContains(response, "0%")
+        self.assertNotContains(response, "0 pages")
+
+    def test_a_recorded_zero_is_not_called_not_started(self):
+        Progress.objects.create(book=self.book, member=self.ada, pages_read=0)
+
+        self.assertNotContains(self._get(), "not started")
+
+    def test_null_pages_list_after_a_recorded_zero(self):
+        Progress.objects.create(book=self.book, member=self.ada, chapters_read=12)
+        Progress.objects.create(book=self.book, member=self.bob, pages_read=0)
+        Progress.objects.create(book=self.book, member=self.cleo, pages_read=5)
+
+        content = self._get().content.decode()
+
+        self.assertLess(content.index("Cleo"), content.index("Bob"))
+        self.assertLess(content.index("Bob"), content.index("Ada"))

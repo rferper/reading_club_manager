@@ -661,3 +661,25 @@ class ProgressTrailBothOtherUnitsTests(TestCase):
         )
 
         self.assertContains(response, "recorded in pages and chapters")
+
+
+class NullPagesTrailTests(TestCase):
+    """#29: a NULL page count is nothing recorded on the trail of a page book."""
+
+    def test_a_chapters_only_row_on_a_page_book_has_an_empty_trail(self):
+        book = Book.objects.create(
+            title="Middlemarch",
+            author="George Eliot",
+            total_pages=400,
+            is_current=True,
+        )
+        ada = Member.objects.create(name="Ada")
+        progress = Progress.objects.create(book=book, member=ada, chapters_read=12)
+        record(progress, 3, chapters_read=12)
+
+        url = reverse("club:progress_trail", args=[book.pk, ada.pk])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["rows"], [])
+        self.assertNotContains(response, "0 of 400")
