@@ -1274,7 +1274,8 @@ exactly one query to `/questions/` and to `/history/<pk>/` however many exist (#
 **Accepted.** A reply may respond to answer text that has since changed (what editing should
 do to replies is #59). A reply is not hidden from a reader behind on progress (#48). Replying
 returns to `/questions/` with no scroll position kept. Replies are not in the home page's
-"Since you last looked" panel (#40), and have no reactions (#57, #58).
+"Since you last looked" panel (#40; amended by 48, answer replies joined it in #60), and have
+no reactions (#57, #58).
 
 
 ## 44. Archive year filter: a book belongs to the year it finished; undated books belong to none
@@ -1346,4 +1347,36 @@ migration.
 
 **Amendment to 43.** Decision 43 says replies are not in the panel (#40). That is true only of
 replies to answers (`AnswerReply`): #40 took "replies" to mean note replies. Replies to answers
-stay out of the panel and are tracked in #60.
+stay out of the panel and are tracked in #60. (Amended by 48: they joined the panel in #60.)
+
+## 48. Other members' new answer replies join the "Since you last looked" panel
+
+**Issue:** #60. **Amends:** 43, 46.
+
+Numbered 48, not 47: the next free number on disk is 47, but #49 reserves it for its own
+decision, so this one skips it. Do not renumber.
+
+**What counts.** On the current book only, other members' `AnswerReply` rows, reached through
+`answer__question__book`, with `created_on` strictly after the decision 31 marker
+(`notifications_seen_at`, or the start of `joined_on` when null). The viewer's own replies are
+never counted; another member's reply under the viewer's own answer is. A deactivated author
+still counts (3). Replies are immutable (7), so `created_on` is the only timestamp, and
+editing an answer neither makes it new nor brings its replies back. Deleting a reply, an
+answer or a question takes its replies out of the count (43); nothing is stored.
+
+**Strict marker.** A reply created exactly at the marker is not counted; one a second later
+is, the same rule as notes and replies in 46. Pinned by an exact-tie test, and a `>` to `>=`
+mutation on the new query fails it.
+
+**One extra query.** A single `.count()` on `AnswerReply`, so the home page goes from 6 to 7
+queries for an identified member with a current book, flat in the number of replies. Pinned in
+`test_whats_new.py` as `HOME_QUERIES_WITH_ANSWER_REPLIES`. No migration.
+
+**Order and shape.** The item reads "N new answer reply/replies from other members", the
+count and the phrase linking to the questions page, and comes last: new book, questions,
+answers, notes, note replies, answer replies. It is a separate item from the note reply item
+(different page and model, 43), and answers and answer replies are counted separately. The
+panel is still counts-only, and Mark as seen is unchanged.
+
+**Amendments.** 43 said replies are not in the home page's panel and 46 said replies to
+answers stay out of it; both are amended here, with their old wording left as history.
