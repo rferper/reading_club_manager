@@ -41,7 +41,7 @@ route that is not here.
 | `/questions/add/` | `question_add` | GET, POST | Admin | Post a discussion question | #12 | Built |
 | `/questions/<pk>/edit/` | `question_edit` | GET, POST | Admin | Edit or reorder a question | #12 | Built |
 | `/questions/<pk>/delete/` | `question_delete` | GET, POST | Admin | Remove a question and its answers | #12 | Built |
-| `/history/` | `history` | GET | Public | Every book that is not the current read, newest finished first, uncapped | #14 | Built |
+| `/history/` | `history` | GET | Public | Every book that is not the current read, newest finished first, uncapped. Optional `?q=`: case-insensitive substring search of title and author, every whitespace-separated word must match one of them; blank `q` is the full list; `q` is trimmed and cut at 200 characters; read-only, no state changes | #14, #20 | Built |
 | `/history/<pk>/` | `history_detail` | GET | Public | One book: its progress, notes (with their replies beneath, read-only), answers and every member's score. The discussion is read-only; an identified member also gets a rating form here, posting to `book_rate` | #14, #16 | Built |
 | `/books/start/` | `book_start` | GET, POST | Admin | Start a new current book | #14 | Built |
 | `/books/<pk>/edit/` | `book_edit` | GET, POST | Admin | Edit a book's metadata | #14 | Built |
