@@ -125,7 +125,10 @@ class ProgressOverviewQueryCountTests(TestCase):
         start = Member.objects.count()
         for index in range(start, start + count):
             member = Member.objects.create(name=f"Member {index:02d}")
-            Progress.objects.create(book=self.book, member=member, pages_read=pages)
+            # Through `record()`, so the log has something in it. The pin below
+            # is what says the overview never reads it, and a link per row
+            # never becomes a query per row (#18).
+            Progress(book=self.book, member=member, pages_read=pages).record()
 
     def test_the_query_count_does_not_grow_with_the_roster(self):
         self._add_members(2)
@@ -317,9 +320,11 @@ class ProgressOverviewChapterQueryCountTests(TestCase):
         start = Member.objects.count()
         for index in range(start, start + count):
             member = Member.objects.create(name=f"Member {index:02d}")
-            Progress.objects.create(
+            # Recorded through `record()`, so every row carries a log entry the
+            # overview must still not go looking for (#18).
+            Progress(
                 book=self.book, member=member, chapters_read=chapters
-            )
+            ).record()
 
     def test_the_query_count_does_not_grow_with_the_roster(self):
         self._add_members(2)
@@ -396,6 +401,15 @@ class ProgressOverviewLinksTests(TestCase):
             title="Middlemarch", author="George Eliot", total_pages=880, is_current=True
         )
         cls.ada = Member.objects.create(name="Ada")
+
+    def test_each_row_links_to_that_members_trail_through_this_book(self):
+        """#18. Through `{% url %}`, and off objects the page already has."""
+        response = self.client.get(reverse("club:progress"))
+
+        self.assertContains(
+            response,
+            reverse("club:progress_trail", args=[self.book.pk, self.ada.pk]),
+        )
 
     def test_the_nav_reaches_the_overview(self):
         response = self.client.get(reverse("club:home"))

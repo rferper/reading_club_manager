@@ -1,13 +1,17 @@
 """Recording how far a member has read, and the percentage derived from it."""
 
-from datetime import date
+from datetime import date, timedelta
+from importlib import import_module
+from types import SimpleNamespace
 
+from django.apps import apps as global_apps
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
-from ..models import Book, Member, Progress
+from ..models import Book, Member, Progress, ProgressEntry
 
 
 class ProgressPercentTests(TestCase):
@@ -570,3 +574,388 @@ class ProgressIdentityTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(Progress.objects.count(), 0)
+
+
+class ProgressEntryModelTests(TestCase):
+    """The log itself: what an entry may hold, and what it derives.
+
+    Decision #26. The constraint is the interesting part — it is what makes a
+    fixture and a shell meet the same rule the view does.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.book = Book.objects.create(
+            title="Middlemarch", author="George Eliot", total_pages=880
+        )
+        cls.progress = Progress.objects.create(
+            book=cls.book, member=cls.ada, pages_read=440
+        )
+
+    def test_an_entry_recording_both_units_is_rejected(self):
+        """A number recorded on one scale must never be readable against
+        another — decision #25, applied to the log."""
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ProgressEntry.objects.create(
+                progress=self.progress, pages_read=440, chapters_read=12
+            )
+
+    def test_an_entry_recording_neither_unit_is_rejected(self):
+        """An entry with nothing in it is not a data point."""
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ProgressEntry.objects.create(progress=self.progress)
+
+    def test_the_constraint_says_what_is_wrong_rather_than_naming_itself(self):
+        entry = ProgressEntry(progress=self.progress, pages_read=1, chapters_read=1)
+
+        with self.assertRaises(ValidationError) as raised:
+            entry.full_clean()
+
+        self.assertIn("one of the two", " ".join(raised.exception.messages))
+
+    def test_entries_come_back_newest_first(self):
+        first = ProgressEntry.objects.create(progress=self.progress, pages_read=100)
+        second = ProgressEntry.objects.create(progress=self.progress, pages_read=200)
+
+        self.assertEqual(list(self.progress.entries.all()), [second, first])
+
+    def test_two_entries_in_the_same_tick_still_come_back_in_order(self):
+        """`-pk` is the tiebreak, the way `Note` already does it."""
+        moment = timezone.now()
+        first = ProgressEntry.objects.create(progress=self.progress, pages_read=100)
+        second = ProgressEntry.objects.create(progress=self.progress, pages_read=200)
+        ProgressEntry.objects.filter(pk__in=[first.pk, second.pk]).update(
+            recorded_on=moment
+        )
+
+        self.assertEqual(list(self.progress.entries.all()), [second, first])
+
+    def test_units_read_reads_the_column_the_book_is_measured_in(self):
+        entry = ProgressEntry.objects.create(progress=self.progress, pages_read=440)
+
+        self.assertEqual(entry.units_read, 440)
+
+    def test_the_percentage_comes_from_the_books_own_arithmetic(self):
+        """Decision #19: `Book.percent_of()` is the only copy of it."""
+        entry = ProgressEntry.objects.create(progress=self.progress, pages_read=440)
+
+        self.assertEqual(entry.percent, 50)
+        self.assertEqual(entry.percent, self.book.percent_of(440))
+
+    def test_an_entry_in_the_other_unit_reads_as_nothing_on_this_scale(self):
+        """A chapter count recorded before the book moved to pages is still a
+        true thing somebody typed; it is simply not on this trail."""
+        entry = ProgressEntry.objects.create(progress=self.progress, chapters_read=12)
+
+        self.assertIsNone(entry.units_read)
+        self.assertIsNone(entry.percent)
+
+    def test_a_book_with_no_count_has_no_percentage_to_plot(self):
+        no_count = Book.objects.create(title="Untitled", author="A")
+        progress = Progress.objects.create(
+            book=no_count, member=self.ada, pages_read=40
+        )
+        entry = ProgressEntry.objects.create(progress=progress, pages_read=40)
+
+        self.assertEqual(entry.units_read, 40)
+        self.assertIsNone(entry.percent)
+
+    def test_no_percentage_is_stored_on_an_entry(self):
+        self.assertNotIn(
+            "percent", [field.name for field in ProgressEntry._meta.get_fields()]
+        )
+
+    def test_deleting_the_progress_row_takes_its_entries_with_it(self):
+        ProgressEntry.objects.create(progress=self.progress, pages_read=440)
+        self.progress.delete()
+
+        self.assertEqual(ProgressEntry.objects.count(), 0)
+
+
+class ProgressRecordTests(TestCase):
+    """`Progress.record()` — the one place the row and the log are written."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.book = Book.objects.create(
+            title="Middlemarch", author="George Eliot", total_pages=880
+        )
+
+    def _record(self, pages_read):
+        progress = Progress.objects.filter(
+            book=self.book, member=self.ada
+        ).first() or Progress(book=self.book, member=self.ada)
+        progress.pages_read = pages_read
+        progress.record()
+        return progress
+
+    def test_recording_a_number_appends_the_entry_that_dates_it(self):
+        progress = self._record(100)
+
+        self.assertEqual(progress.entries.count(), 1)
+        self.assertEqual(progress.entries.get().pages_read, 100)
+
+    def test_recording_an_unchanged_number_appends_nothing(self):
+        progress = self._record(431)
+        self._record(431)
+
+        self.assertEqual(progress.entries.count(), 1)
+
+    def test_the_newest_entry_always_matches_the_row(self):
+        """The invariant decision #26 accepts the cost of, stated as a test."""
+        progress = self._record(100)
+        self._record(440)
+
+        progress.refresh_from_db()
+        self.assertEqual(progress.entries.first().pages_read, progress.pages_read)
+
+    def test_record_returns_the_entry_it_appended_and_nothing_when_it_did_not(self):
+        progress = Progress(book=self.book, member=self.ada, pages_read=100)
+
+        self.assertIsNotNone(progress.record())
+        self.assertIsNone(progress.record())
+
+    def test_recording_chapters_appends_a_chapter_entry(self):
+        chapter_book = Book.objects.create(
+            title="The Left Hand of Darkness", author="Le Guin", total_chapters=20
+        )
+        progress = Progress(book=chapter_book, member=self.ada, chapters_read=12)
+        progress.record()
+
+        entry = progress.entries.get()
+        self.assertEqual(entry.chapters_read, 12)
+        self.assertIsNone(entry.pages_read)
+
+    def test_a_row_with_nothing_in_this_books_unit_appends_nothing(self):
+        """Reachable only from the shell: the form requires the field it asks
+        for. The row is still saved; there is simply no number for a trail."""
+        chapter_book = Book.objects.create(
+            title="The Left Hand of Darkness", author="Le Guin", total_chapters=20
+        )
+        progress = Progress(book=chapter_book, member=self.ada, pages_read=431)
+
+        self.assertIsNone(progress.record())
+        self.assertEqual(Progress.objects.filter(book=chapter_book).count(), 1)
+        self.assertEqual(progress.entries.count(), 0)
+
+
+class ProgressUpdateAppendsEntriesTests(TestCase):
+    """What `/progress/update/` leaves behind in the log."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.book = Book.objects.create(
+            title="Middlemarch",
+            author="George Eliot",
+            total_pages=880,
+            is_current=True,
+        )
+
+    def setUp(self):
+        session = self.client.session
+        session["member_id"] = self.ada.pk
+        session.save()
+
+    def _save(self, pages_read):
+        return self.client.post(
+            reverse("club:progress_update"), {"pages_read": str(pages_read)}
+        )
+
+    def test_three_saves_leave_one_row_and_three_entries(self):
+        self._save(100)
+        self._save(300)
+        self._save(604)
+
+        progress = Progress.objects.get()
+        self.assertEqual(Progress.objects.count(), 1)
+        self.assertEqual(progress.entries.count(), 3)
+        self.assertEqual(progress.entries.first().pages_read, progress.pages_read)
+
+    def test_an_unchanged_resubmission_appends_no_entry(self):
+        """The member did say it again, so `updated_on` moves. Nothing moved
+        on the trail, so the trail gains nothing."""
+        self._save(431)
+        # Backdated rather than measured against the previous save: two POSTs
+        # land inside one tick of the system clock, which would make this
+        # assert the resolution of `datetime.now()` rather than the rule.
+        Progress.objects.update(updated_on=timezone.now() - timedelta(hours=1))
+        stale = Progress.objects.get().updated_on
+
+        self._save(431)
+
+        progress = Progress.objects.get()
+        self.assertEqual(progress.entries.count(), 1)
+        self.assertEqual(progress.pages_read, 431)
+        self.assertGreater(progress.updated_on, stale)
+
+    def test_a_get_writes_neither_a_row_nor_an_entry(self):
+        """Decision #18, now with a second table to leave alone."""
+        self.client.get(reverse("club:progress_update"))
+
+        self.assertEqual(Progress.objects.count(), 0)
+        self.assertEqual(ProgressEntry.objects.count(), 0)
+
+    def test_a_rejected_number_appends_nothing(self):
+        self._save(2000)
+
+        self.assertEqual(ProgressEntry.objects.count(), 0)
+
+    def test_an_unidentified_post_is_a_403_and_writes_no_entry(self):
+        """Decision #16, as the regression guard for a write path that has
+        just grown a second table."""
+        stranger = self.client_class()
+
+        response = stranger.post(
+            reverse("club:progress_update"), {"pages_read": "440"}
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(ProgressEntry.objects.count(), 0)
+        self.assertEqual(Progress.objects.count(), 0)
+
+    def test_a_lower_number_afterwards_is_kept_rather_than_refused(self):
+        self._save(604)
+        self._save(431)
+
+        progress = Progress.objects.get()
+        self.assertEqual(progress.pages_read, 431)
+        self.assertEqual(
+            [entry.pages_read for entry in progress.entries.all()], [431, 604]
+        )
+
+
+class ProgressEntryBackfillTests(TestCase):
+    """The data migration that gives an existing database its first dots.
+
+    The migration function is called directly against the live app registry
+    rather than replayed through the executor: `apps.get_model` is the same
+    API a historical registry offers, and this keeps the test about what the
+    backfill writes instead of about migration plumbing.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.bo = Member.objects.create(name="Bo")
+        cls.book = Book.objects.create(
+            title="Middlemarch", author="George Eliot", total_pages=880
+        )
+        cls.chapter_book = Book.objects.create(
+            title="The Left Hand of Darkness", author="Le Guin", total_chapters=20
+        )
+
+    def setUp(self):
+        self.migration = import_module(
+            "club.migrations.0010_backfill_progress_entries"
+        )
+
+    def _backfill(self):
+        self.migration.backfill_entries(
+            global_apps, SimpleNamespace(connection=connection)
+        )
+
+    def _row(self, book, member, recorded_at, **counts):
+        progress = Progress.objects.create(book=book, member=member, **counts)
+        # `updated_on` is `auto_now`, so it is backdated afterwards — which is
+        # exactly the state an existing database is in when this runs.
+        Progress.objects.filter(pk=progress.pk).update(updated_on=recorded_at)
+        progress.refresh_from_db()
+        return progress
+
+    def test_every_existing_row_gets_one_entry(self):
+        self._row(self.book, self.ada, timezone.now(), pages_read=604)
+        self._row(self.book, self.bo, timezone.now(), pages_read=431)
+
+        self._backfill()
+
+        self.assertEqual(ProgressEntry.objects.count(), 2)
+        for progress in Progress.objects.all():
+            self.assertEqual(progress.entries.count(), 1)
+
+    def test_the_entry_carries_the_rows_own_value(self):
+        progress = self._row(self.book, self.ada, timezone.now(), pages_read=604)
+
+        self._backfill()
+
+        self.assertEqual(progress.entries.get().pages_read, 604)
+
+    def test_the_entry_carries_the_rows_own_timestamp(self):
+        """A backfilled entry dated today would claim the club read the whole
+        book this afternoon."""
+        recorded_at = timezone.now() - timedelta(days=40)
+        progress = self._row(self.book, self.ada, recorded_at, pages_read=604)
+
+        self._backfill()
+
+        self.assertEqual(progress.entries.get().recorded_on, recorded_at)
+
+    def test_a_chapter_measured_row_is_backfilled_in_chapters(self):
+        progress = self._row(
+            self.chapter_book, self.ada, timezone.now(), chapters_read=14
+        )
+
+        self._backfill()
+
+        entry = progress.entries.get()
+        self.assertEqual(entry.chapters_read, 14)
+        self.assertIsNone(entry.pages_read)
+
+    def test_a_row_left_over_from_the_other_measure_is_backfilled_in_that_unit(self):
+        """Decision #25: pages are what somebody typed, so pages are what the
+        backfill records. The trail names them as recorded in the other unit
+        rather than reading them against this one."""
+        progress = self._row(
+            self.chapter_book, self.ada, timezone.now(), pages_read=431
+        )
+
+        self._backfill()
+
+        entry = progress.entries.get()
+        self.assertEqual(entry.pages_read, 431)
+        self.assertIsNone(entry.chapters_read)
+
+    def test_a_recorded_zero_is_backfilled_as_a_zero(self):
+        """Decision #19: a recorded zero is a sentence somebody said."""
+        progress = self._row(self.book, self.ada, timezone.now(), pages_read=0)
+
+        self._backfill()
+
+        self.assertEqual(progress.entries.get().pages_read, 0)
+
+    def test_no_progress_row_is_rewritten(self):
+        recorded_at = timezone.now() - timedelta(days=3)
+        progress = self._row(self.book, self.ada, recorded_at, pages_read=604)
+
+        self._backfill()
+
+        progress.refresh_from_db()
+        self.assertEqual(progress.pages_read, 604)
+        self.assertEqual(progress.updated_on, recorded_at)
+
+    def test_a_row_that_already_has_an_entry_is_left_alone(self):
+        """Running it twice does not double anybody's first dot."""
+        progress = self._row(self.book, self.ada, timezone.now(), pages_read=604)
+
+        self._backfill()
+        self._backfill()
+
+        self.assertEqual(progress.entries.count(), 1)
+
+    def test_an_empty_database_gets_no_entries(self):
+        self._backfill()
+
+        self.assertEqual(ProgressEntry.objects.count(), 0)
+
+    def test_it_reverses_by_emptying_the_log(self):
+        progress = self._row(self.book, self.ada, timezone.now(), pages_read=604)
+        self._backfill()
+
+        self.migration.drop_entries(
+            global_apps, SimpleNamespace(connection=connection)
+        )
+
+        self.assertEqual(ProgressEntry.objects.count(), 0)
+        self.assertTrue(Progress.objects.filter(pk=progress.pk).exists())

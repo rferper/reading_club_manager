@@ -678,3 +678,131 @@ The overview keeps its single subquery: it selects the column this book is
 measured in, which is one column either way. Two queries at two members and at
 twenty-two, still pinned by `assertNumQueries` — decision #19's count is
 unchanged, not merely re-measured.
+
+## 26. The progress log is a second model beside `Progress`, not `Progress` itself
+
+Settled while building the progress trail (#18). The issue was filed with two
+options and this is the one it closes on.
+
+**A separate append-only `ProgressEntry`, appended beside `Progress`.**
+`Progress` keeps its unique row per member per book and keeps meaning "where
+this member is now"; every number ever recorded also lands in `ProgressEntry`,
+and a member's trail through a book is the list of them. The alternative —
+making `Progress` itself append-only, dropping the unique constraint and
+deriving the current value from the latest row — is settled against, and
+re-opening it means unseating this decision first.
+
+Why, in the order that decided it:
+
+**It changes no invariant the app already leans on.** Dropping
+`one_progress_row_per_member_per_book` would take with it the assumption behind
+`Progress.units_read`, `Progress.percent`, `Progress.Meta.ordering`,
+`history_detail`'s progress list and the `Progress` rows the admin edits, every
+one of which reads a row as *the* answer for that member. All of them keep
+working untouched here, because the sentence they encode is still true.
+
+**It leaves the write path #9 built alone.** `/progress/update/` still binds one
+form to one row and saves it in place, the GET still writes nothing (decision
+#18), and the difference is one appended row in the same transaction. Making
+`Progress` an insert would need a new answer to what a second identical
+submission means, on the route that already had one.
+
+**It leaves the `/progress/` query pin alone.** The overview annotates every
+active member through a single correlated subquery, pinned at
+`assertNumQueries(2)` at two members and again at twenty-two (decisions #19 and
+#25). The overview never reads the log, so the pin holds by construction. The
+other shape would put a latest-row-per-member lookup on a table that grows
+without bound, on the one page whose whole point is that it does not grow a
+query per row.
+
+**The migration is additive.** A new table plus a data migration that writes one
+entry per existing `Progress` row; no column dropped, no constraint loosened, no
+existing row rewritten, and `dev_seed.json` and anyone's database survive it
+untouched. The other shape is a constraint drop over live data, which is the one
+migration shape this project has never had to do.
+
+**What it costs, accepted:** two places hold the same number and they can
+disagree. **The rule that keeps them honest is that the newest entry always
+matches the current row**, and it is held by writing both in one place —
+`Progress.record()`, inside one `transaction.atomic()`. It is not enforced by
+the database, and an admin editing a `Progress` row straight in `/admin/`
+corrects the current value without leaving a dot on the trail. That is the
+honest cost, and #31 is where it gets paid off.
+
+**No `save()` override guards the append** — decision #17 unchanged. Recording
+progress is an act with a consequence and the consequence is written where the
+act is, the same way finishing a book is two explicit saves in one transaction
+rather than a hidden side effect.
+
+Five smaller calls that come with it:
+
+- **An unchanged resubmission appends nothing.** Saving 431 when 431 is already
+  recorded moves `updated_on`, because the member did say it again, and adds no
+  entry. A trail is a record of movement, and three identical dots from
+  somebody double-clicking save are noise in the one place this feature exists
+  to make readable. `record()` compares against the newest entry rather than
+  against the row's old value, so the comparison and the invariant are the same
+  check.
+- **The backfill takes each row's own `updated_on`.** It is the only timestamp
+  there is, and for a single data point it is the right one — it says when that
+  value was recorded. One point draws no line, so nothing is inferred from it
+  that it cannot support. `recorded_on` is `auto_now_add`, which overwrites what
+  is set on the way in, so the data migration inserts and then puts the original
+  timestamps back in one statement.
+- **The backfill records the unit the row actually holds**, which is chapters
+  where the book is measured in chapters and the row has a chapter count, and
+  pages otherwise. A row carrying only pages on a book that has since moved to
+  chapters is backfilled in pages, because pages are what somebody typed —
+  decision #25's rule applies to the backfill as much as to the write path, and
+  the trail then names those entries as recorded in the other unit rather than
+  silently reading them against this one.
+- **An entry carries one of its two columns and never both or neither**, as a
+  `CheckConstraint` with a `violation_error_message` — the house pattern from
+  decisions #2, #17 and #24, so a fixture and a shell meet the rule as well as
+  the view does. Two columns rather than one reused, for decision #25's reason
+  exactly: a number recorded on one scale must never become readable against
+  another.
+- **The trail is a CSS bar, not an SVG line.** One dated row per entry, reusing
+  the `--rule` track and `--accent` fill `progress.html` already renders, with
+  the count and the percentage beside it. An SVG line would need a time axis,
+  which is the first step towards the analytics product the design system opens
+  by ruling out; and reusing the component the club already reads is smaller
+  than introducing a second visual language. No JavaScript and no dependency —
+  a progress bar is a CSS width.
+
+The route this adds, `/books/<pk>/progress/<member_pk>/`, is public like every
+other read in this app, and is in `_docs/api.md`.
+
+## 27. The trail shows one scale, counts the other, and names its changes in text
+
+Settled while building the trail page (#18). Calls the issue's criteria left to
+the implementer.
+
+**Only entries recorded in the unit the book is measured in now are on the
+trail; the rest are counted out loud.** A book that moved from pages to chapters
+shows "N earlier entries were recorded in pages ... not on this trail" rather
+than a blank page or a page count read against a chapter total.
+
+Why: decision #25 � a number recorded on one scale is never readable against
+another. Hiding them silently would make the page look like the member recorded
+nothing, which decision #19 says is a different sentence. The entries stay in
+the database untouched.
+
+**The first entry on a trail has no change figure, and a change never crosses
+the filter above.** The oldest visible entry is compared with nothing, so a
+chapter entry is never "+6 chapters" over a page entry.
+
+**Changes are text, signed, and a decrease keeps its minus** ("-173 pages,
+-20%"). No colour or arrow carries the meaning. When the book has no
+denominator the page change is still named but no percentage change is invented.
+
+**A trail with one entry says there is nothing to compare it to yet** (one point
+draws no line, decision #26). A member with no `Progress` row at all gets "has
+not recorded anything", never a bar at zero.
+
+**Four queries whatever the trail's length** � book, member, row, entries with
+`progress__book` joined in � pinned by `assertNumQueries`, because
+`units_read` and `percent` on each entry would otherwise ask the book per dot.
+
+**The overview links only active members; the archive links every row,** the
+deactivated member's included (decision #3).

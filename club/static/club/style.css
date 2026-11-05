@@ -348,6 +348,40 @@ button {
   margin-right: 0.4rem;
 }
 
+/* One member's trail through one book ------------------------------------- */
+
+/* A list of dated panels, newest first — the same bar the overview draws,
+ * repeated once per entry, with its number beside it. Not a plotted line: a
+ * line needs a time axis, and this is a noticeboard. */
+.trail {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.trail__entry {
+  margin-bottom: 0.75rem;
+}
+
+.trail__count {
+  margin: 0;
+}
+
+/* The movement since the entry below it. Muted, because the count is the
+ * thing being read and this is the comparison beside it. */
+.trail__change {
+  color: var(--ink-muted);
+}
+
+.trail__bar {
+  margin: 0.15rem 0 0;
+}
+
+.trail .progress {
+  width: 12rem;
+  margin-right: 0.4rem;
+}
+
 /* Notes ------------------------------------------------------------------- */
 
 /* The byline sits under the note it belongs to, with the remove button on the

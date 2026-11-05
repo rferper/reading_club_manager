@@ -10,7 +10,7 @@ the JSON parses.
 from django.test import TestCase
 from django.urls import reverse
 
-from ..models import Answer, Book, Member, MemberRating, Note, Progress, Question
+from ..models import Answer, Book, Member, MemberRating, Note, Progress, ProgressEntry, Question
 
 
 class SeedFixtureTests(TestCase):
@@ -271,3 +271,67 @@ class SeededPagesRenderRealContentTests(TestCase):
 
         self.assertContains(response, "chapters, 100%")
         self.assertContains(response, "chapters, 70%")
+
+
+class SeededTrailTests(TestCase):
+    """The progress log in the demo club (#18): every awkward trail is there."""
+
+    fixtures = ["dev_seed"]
+
+    def _trail(self, progress):
+        return list(progress.entries.values_list("pages_read", "chapters_read"))
+
+    def test_every_progress_row_has_entries_and_the_newest_matches_the_row(self):
+        for progress in Progress.objects.all():
+            newest = progress.entries.first()
+            self.assertIsNotNone(newest, progress)
+            self.assertEqual(newest.units_read, progress.units_read, progress)
+
+    def test_there_is_a_multi_week_trail(self):
+        self.assertTrue(
+            any(p.entries.count() >= 3 for p in Progress.objects.all())
+        )
+
+    def test_there_is_a_trail_that_goes_back_down(self):
+        def goes_down(progress):
+            values = [e.units_read for e in progress.entries.all()]  # newest first
+            return any(a < b for a, b in zip(values, values[1:]))
+
+        # Newest first, so a pair where the newer value is lower reads a < b.
+        self.assertTrue(any(goes_down(p) for p in Progress.objects.all()))
+
+    def test_there_is_a_single_recorded_zero(self):
+        self.assertTrue(
+            any(
+                p.entries.count() == 1 and p.entries.first().units_read == 0
+                for p in Progress.objects.all()
+            )
+        )
+
+    def test_a_member_has_nothing_at_all_on_the_current_book(self):
+        current = Book.objects.get(is_current=True)
+        dev = Member.objects.get(name__startswith="Dev")
+
+        self.assertFalse(Progress.objects.filter(book=current, member=dev).exists())
+
+    def test_there_is_a_chapter_measured_trail(self):
+        self.assertTrue(
+            ProgressEntry.objects.filter(
+                chapters_read__isnull=False, progress__book__total_chapters__gt=0
+            ).exists()
+        )
+
+    def test_the_deactivated_member_has_a_trail(self):
+        zoe = Member.objects.get(is_active=False)
+
+        self.assertTrue(ProgressEntry.objects.filter(progress__member=zoe).exists())
+
+    def test_the_seeded_trail_pages_render(self):
+        for progress in Progress.objects.all():
+            response = self.client.get(
+                reverse(
+                    "club:progress_trail", args=[progress.book_id, progress.member_id]
+                )
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, "not on this trail")

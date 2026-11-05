@@ -262,6 +262,10 @@ def progress_update(request):
     The member comes from the session, never from the form — decision #4. GET
     renders the form so an unidentified visitor is sent to the picker and
     returned here; POST saves and redirects, so a refresh cannot resubmit.
+
+    A successful POST also appends a `ProgressEntry`, which is how the trail
+    on `progress_trail` gets its dots. The GET still writes neither of them
+    (decision #18).
     """
     book = Book.objects.current()
 
@@ -282,7 +286,12 @@ def progress_update(request):
     form = ProgressForm(request.POST or None, instance=progress, book=book)
 
     if request.method == "POST" and form.is_valid():
-        progress = form.save()
+        # `commit=False` and then `record()`, because saving the row and
+        # appending the entry that dates it are one act (decision #26).
+        # `Progress.record()` is the one place both writes happen, inside one
+        # transaction, so the row and the newest entry cannot drift apart.
+        progress = form.save(commit=False)
+        progress.record()
         # Never a bare count: the unit is part of the sentence, because "12"
         # means nothing on a book measured in chapters or in anything else.
         counted = f"You are {progress.units_read} {book.measure} in"
@@ -351,6 +360,83 @@ def progress_overview(request):
         request,
         "club/progress.html",
         {"book": book, "rows": rows},
+    )
+
+
+def progress_trail(request, pk, member_pk):
+    """One member's trail through one book: every number they recorded, dated.
+
+    Public, like every other read in this app. An unknown book or member is a
+    404 rather than an empty page about nobody.
+
+    Four queries whatever the trail's length — the book, the member, the row
+    and its entries — because the entries come back with their book already
+    attached. `entry.units_read` and `entry.percent` both ask the book what it
+    is measured in, and asking it per row would turn a link on the overview
+    into a query per dot.
+
+    Only the entries recorded in the unit the book is measured in now are on
+    the trail. The rest are counted, not hidden: a book that changed measure
+    already makes a member read as "not started" on the overview (decision
+    #25), and this page says that out loud rather than going quietly blank.
+    """
+    book = get_object_or_404(Book, pk=pk)
+    member = get_object_or_404(Member, pk=member_pk)
+
+    progress = (
+        Progress.objects.filter(book=book, member=member)
+        .select_related("book", "member")
+        .first()
+    )
+
+    rows = []
+    recorded_in_other_unit = 0
+
+    if progress is not None:
+        column = "chapters_read" if book.measure == "chapters" else "pages_read"
+        entries = list(progress.entries.select_related("progress__book"))
+        on_this_scale = [
+            entry for entry in entries if getattr(entry, column) is not None
+        ]
+        recorded_in_other_unit = len(entries) - len(on_this_scale)
+
+        for index, entry in enumerate(on_this_scale):
+            # Newest first, so the entry to compare against is the next one
+            # down the list. The oldest has nothing behind it and gets no
+            # change figure at all — a first number is not an improvement on
+            # anything.
+            previous = (
+                on_this_scale[index + 1]
+                if index + 1 < len(on_this_scale)
+                else None
+            )
+            change = percent_change = None
+
+            if previous is not None:
+                change = entry.units_read - previous.units_read
+
+                if entry.percent is not None and previous.percent is not None:
+                    percent_change = entry.percent - previous.percent
+
+            rows.append(
+                {
+                    "entry": entry,
+                    "change": change,
+                    "percent_change": percent_change,
+                }
+            )
+
+    return render(
+        request,
+        "club/progress_trail.html",
+        {
+            "book": book,
+            "member": member,
+            "progress": progress,
+            "rows": rows,
+            "recorded_in_other_unit": recorded_in_other_unit,
+            "other_measure": "pages" if book.measure == "chapters" else "chapters",
+        },
     )
 
 

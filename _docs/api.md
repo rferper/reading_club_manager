@@ -34,7 +34,7 @@ route that is not here.
 | `/members/<pk>/edit/` | `member_edit` | GET, POST | Admin | Rename a member or change their role | #5 | Built |
 | `/members/<pk>/toggle/` | `member_toggle` | POST | Admin | Deactivate or reactivate a member | #5 | Built |
 | `/progress/` | `progress` | GET | Public | Everyone's progress on the current book, furthest first | #10 | Built |
-| `/progress/update/` | `progress_update` | GET, POST | Member | How far you have read the current book, counted in whatever that book is measured in — pages, or chapters: GET the form, POST to save | #9, #17 | Built |
+| `/progress/update/` | `progress_update` | GET, POST | Member | How far you have read the current book, counted in whatever that book is measured in — pages, or chapters: GET the form, POST to save. A save also appends a `ProgressEntry` unless the number is unchanged | #9, #17, #18 | Built |
 | `/notes/` | `notes` | GET, POST | GET Public, POST Member | Notes newest-first, plus the add form | #11 | Built |
 | `/notes/<pk>/delete/` | `note_delete` | POST | Author or Admin | Remove a note | #11 | Built |
 | `/questions/` | `questions` | GET, POST | GET Public, POST Member | Questions in order with their answers; POST submits your answer | #12, #13 | Built |
@@ -47,6 +47,7 @@ route that is not here.
 | `/books/<pk>/edit/` | `book_edit` | GET, POST | Admin | Edit a book's metadata | #14 | Built |
 | `/books/<pk>/finish/` | `book_finish` | GET, POST | Admin | Record finish date and rating; clear the current flag | #14 | Built |
 | `/books/<pk>/rate/` | `book_rate` | GET, POST | Member | Your own score of 1-5 on a finished book: GET the form, POST to save. Posted from the form on `/history/<pk>/`; renders its own page for a direct GET or a rejected score. Refuses the current read with a message | #16 | Built |
+| `/books/<pk>/progress/<member_pk>/` | `progress_trail` | GET | Public | One member's trail through one book: every number they recorded, newest first, dated, in the unit the book is measured in now, with the percentage and the change from the entry before. Unknown book or member is a 404. Linked from `/progress/` and `/history/<pk>/` | #18 | Built |
 
 ## Conventions
 
