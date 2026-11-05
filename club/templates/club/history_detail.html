@@ -104,7 +104,7 @@
   {% for note in notes %}
     <div class="panel note">
       {{ note.body|linebreaks }}
-      <p class="byline">{{ note.author.name }} · {{ note.created_on }}{% if note.chapter %} · Chapter {{ note.chapter }}{% endif %}</p>
+      <p class="byline">{{ note.author.name }} · {{ note.created_on }}{% if note.chapter %} · Chapter {{ note.chapter }}{% endif %}{% if note.agree_count %} · Agree ({{ note.agree_count }}){% endif %}</p>
     </div>
     {% for reply in note.replies.all %}
       <div class="panel note reply">

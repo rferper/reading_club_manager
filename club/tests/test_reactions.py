@@ -8,7 +8,8 @@ from django.test import Client, TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from ..models import Book, Member, Note, Reaction
+from .helpers import enter_admin
+from ..models import Answer, AnswerReply, Book, Member, Note, Question, Reaction
 
 
 class ReactionBase(TestCase):
@@ -244,3 +245,147 @@ class ReactionQueryTests(ReactionBase):
         Reaction.objects.create(note=self.note, member=self.bob)
         content = self.client.get(reverse("club:notes")).content.decode()
         self.assertLess(content.index("Newer one"), content.index("Lovely"))
+
+
+class ArchiveReactionCountTests(ReactionBase):
+    """The archive prints each top-level note's final count, read-only (#58)."""
+
+    def archive(self, book=None):
+        book = book or self.book
+        return self.client.get(reverse("club:history_detail", args=[book.pk]))
+
+    def finish(self):
+        self.book.is_current = False
+        self.book.finished_on = date(2025, 10, 1)
+        self.book.save()
+
+    def test_a_reacted_note_shows_its_count_in_the_byline(self):
+        Reaction.objects.create(note=self.note, member=self.ada)
+        Reaction.objects.create(note=self.note, member=self.bob)
+        self.finish()
+        self.assertContains(self.archive(), "Agree (2)")
+
+    def test_an_unreacted_note_shows_no_agree_text_at_all(self):
+        self.finish()
+        response = self.archive()
+        self.assertContains(response, "Lovely")
+        self.assertNotContains(response, "Agree")
+
+    def test_no_form_button_or_react_link_for_anyone(self):
+        Reaction.objects.create(note=self.note, member=self.bob)
+        self.finish()
+        react_url = reverse("club:note_react", args=[self.note.pk])
+        viewers = {"anonymous": None, "member": self.ada, "admin": self.ada}
+        for who, member in viewers.items():
+            with self.subTest(viewer=who):
+                client = Client()
+                if member:
+                    session = client.session
+                    session["member_id"] = member.pk
+                    if who == "admin":
+                        enter_admin(session)
+                    session.save()
+                response = client.get(
+                    reverse("club:history_detail", args=[self.book.pk])
+                )
+                self.assertContains(response, "Agree (1)")
+                self.assertNotContains(response, react_url)
+                self.assertNotContains(response, "Undo agree")
+                self.assertNotContains(response, "Agree</button>")
+
+    def test_a_deactivated_reactors_agreement_is_counted(self):
+        Reaction.objects.create(note=self.note, member=self.bob)
+        self.bob.is_active = False
+        self.bob.save()
+        self.finish()
+        self.assertContains(self.archive(), "Agree (1)")
+
+    def test_a_reply_shows_no_count_even_with_a_reaction_row(self):
+        reply = Note.objects.create(
+            book=self.book, author=self.bob, body="Replying", parent=self.note
+        )
+        Reaction.objects.create(note=reply, member=self.ada)
+        self.finish()
+        response = self.archive()
+        self.assertContains(response, "Replying")
+        self.assertNotContains(response, "Agree")
+
+    def test_each_note_shows_its_own_count(self):
+        other = Note.objects.create(book=self.book, author=self.bob, body="Second")
+        Reaction.objects.create(note=self.note, member=self.ada)
+        Reaction.objects.create(note=other, member=self.ada)
+        Reaction.objects.create(note=other, member=self.bob)
+        self.finish()
+        content = self.archive().content.decode()
+        self.assertEqual(content.count("Agree (1)"), 1)
+        self.assertEqual(content.count("Agree (2)"), 1)
+        self.assertLess(content.index("Agree (2)"), content.index("Agree (1)"))
+
+    def test_the_current_book_preview_shows_the_count_without_a_button(self):
+        Reaction.objects.create(note=self.note, member=self.bob)
+        self.identify(self.ada)
+        response = self.archive()
+        self.assertContains(response, "Agree (1)")
+        self.assertNotContains(response, reverse("club:note_react", args=[self.note.pk]))
+
+    def test_the_count_matches_the_notes_page_before_and_after_finishing(self):
+        Reaction.objects.create(note=self.note, member=self.ada)
+        Reaction.objects.create(note=self.note, member=self.bob)
+        self.assertContains(self.client.get(reverse("club:notes")), "Agree (2)")
+        self.finish()
+        self.assertContains(self.archive(), "Agree (2)")
+
+    def test_a_reopened_and_refinished_book_keeps_its_reactions(self):
+        Reaction.objects.create(note=self.note, member=self.ada)
+        Reaction.objects.create(note=self.note, member=self.bob)
+        self.finish()
+        session = self.client.session
+        enter_admin(session)
+        session.save()
+        self.client.post(reverse("club:book_reopen", args=[self.book.pk]))
+        self.book.refresh_from_db()
+        self.assertTrue(self.book.is_current)
+        self.finish()
+        self.assertContains(self.archive(), "Agree (2)")
+
+
+class ArchiveReactionQueryTests(ReactionBase):
+    """Regression guards: these pass before #58 because `_top_level_notes`
+    already annotates `agree_count`. They are not red tests; they pin that
+    printing the count adds no query."""
+
+    def setUp(self):
+        self.book.is_current = False
+        self.book.finished_on = date(2025, 10, 1)
+        self.book.save()
+        self.url = reverse("club:history_detail", args=[self.book.pk])
+
+    def _add_notes(self, n):
+        for i in range(n):
+            note = Note.objects.create(book=self.book, author=self.ada, body=f"n{i}")
+            Reaction.objects.create(note=note, member=self.ada)
+            Reaction.objects.create(note=note, member=self.bob)
+            Note.objects.create(
+                book=self.book, author=self.bob, body=f"r{i}", parent=note
+            )
+
+    def _queries(self):
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        return len(ctx)
+
+    def test_the_archive_is_pinned_at_eight_queries(self):
+        question = Question.objects.create(book=self.book, text="Why?", position=1)
+        answer = Answer.objects.create(question=question, member=self.ada, body="Yes")
+        AnswerReply.objects.create(answer=answer, author=self.bob, body="Agreed")
+        self._add_notes(2)
+        with self.assertNumQueries(8):
+            self.client.get(self.url)
+
+    def test_query_count_is_equal_with_one_note_and_twenty_one(self):
+        Note.objects.filter(book=self.book).delete()
+        self._add_notes(1)
+        small = self._queries()
+        self._add_notes(20)
+        self.assertEqual(small, self._queries())
