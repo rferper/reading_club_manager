@@ -1092,3 +1092,27 @@ unidentified POST is still a 403 (decision #16).
 **Kept.** Scores already stored against an undated book are not deleted and still show
 in the ratings list and averages. Decision #22 (listing) and decision #30 (reopen
 clears `finished_on`, scores stay dormant) are unchanged.
+
+## 37. Forms bind on the request method, never on the body
+
+Settled while building #28.
+
+**The rule.** A view builds its form with `request.POST if request.method == "POST"
+else None`. It never uses `request.POST or None`. An empty `QueryDict` is falsy, so a
+POST with no fields produced an unbound form, `is_valid()` was never reached, and the
+page looked like a fresh GET with no errors. An out-of-range value showed its error and
+an absent one did not, so the two failures disagreed.
+
+**Why every view.** The `or None` form was the house pattern at ten sites: `member_add`,
+`member_edit`, `identify`, `progress_update`, `question_add`, `question_edit`,
+`book_start`, `book_finish`, `book_edit` and `book_rate`. All ten had the defect, and
+fixing only the rating form would have left the app inconsistent. Each now has an
+empty-POST test in the module that owns it. The gates are untouched: the permission
+checks run before any form is built (decisions #14 and #16).
+
+**All-optional forms.** After the change an empty POST on a form whose fields are all
+optional would validate and save. None of the ten is like that: each has at least one
+required field (member name, member choice, the unit read, question text, book title,
+finish date, score). No field was changed and no `required=True` was added. If a form
+with only optional fields is added later, an empty POST will save it, and that is to be
+decided for that form rather than hidden.
