@@ -1011,7 +1011,7 @@ class HistorySearchQueryCountTests(TestCase):
 
     def queries_for(self, count):
         Book.objects.all().delete()
-        member = Member.objects.create(name=f"Ada {count}")
+        member, _ = Member.objects.get_or_create(name="Ada")
         for index in range(count):
             book = Book.objects.create(
                 title=f"Orwell {index}", author="George", finished_on=date(2020, 1, 1)
@@ -1033,8 +1033,215 @@ class HistorySearchQueryCountTests(TestCase):
         for index in range(2):
             Book.objects.create(title=f"Orwell {index}", author="G")
 
-        with self.assertNumQueries(1):
+        with self.assertNumQueries(2):
             self.client.get(reverse("club:history"), {"q": "orwell"})
+
+
+class HistoryYearFilterTests(TestCase):
+    """`?year=` on the archive: the year of `finished_on`, alone or with `q`."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.first_day = Book.objects.create(
+            title="Animal Farm", author="George Orwell", finished_on=date(2023, 1, 1)
+        )
+        cls.last_day = Book.objects.create(
+            title="Burmese Days", author="George Orwell", finished_on=date(2023, 12, 31)
+        )
+        cls.mid = Book.objects.create(
+            title="Dune", author="Frank Herbert", finished_on=date(2023, 6, 15)
+        )
+        cls.before = Book.objects.create(
+            title="Emma", author="Jane Austen", finished_on=date(2022, 12, 31)
+        )
+        cls.after = Book.objects.create(
+            title="Kim", author="Rudyard Kipling", finished_on=date(2024, 1, 1)
+        )
+        cls.undated = Book.objects.create(title="Undated Orwell", author="George Orwell")
+        cls.current = Book.objects.create(
+            title="Current Orwell",
+            author="George Orwell",
+            is_current=True,
+            finished_on=date(2019, 3, 3),
+        )
+
+    def get(self, **params):
+        return self.client.get(reverse("club:history"), params)
+
+    def titles(self, response):
+        return [book.title for book in response.context["books"]]
+
+    def test_year_lists_only_that_year_boundaries_included(self):
+        self.assertEqual(
+            self.titles(self.get(year="2023")),
+            ["Burmese Days", "Dune", "Animal Farm"],
+        )
+
+    def test_undated_book_is_excluded_under_a_year_and_present_unfiltered(self):
+        self.assertNotIn("Undated Orwell", self.titles(self.get(year="2023")))
+        unfiltered = self.get()
+        self.assertIn("Undated Orwell", self.titles(unfiltered))
+        self.assertContains(unfiltered, "no finish date recorded")
+
+    def test_current_read_is_never_listed_and_never_offers_a_year(self):
+        self.assertNotIn("Current Orwell", self.titles(self.get()))
+        self.assertEqual(self.get().context["years"], [2024, 2023, 2022])
+        self.assertEqual(self.titles(self.get(year="2019")), self.titles(self.get()))
+
+    def test_year_options_are_derived_newest_first_one_per_year(self):
+        response = self.get()
+        self.assertEqual(response.context["years"], [2024, 2023, 2022])
+        content = response.content.decode()
+        self.assertLess(content.index(">2024<"), content.index(">2023<"))
+        self.assertLess(content.index(">2023<"), content.index(">2022<"))
+        self.assertEqual(content.count(">2023<"), 1)
+
+    def test_all_years_option_comes_first_and_select_has_a_label(self):
+        response = self.get()
+        self.assertContains(
+            response, '<label for="history-year">Year</label>', html=True
+        )
+        content = response.content.decode()
+        self.assertLess(content.index("All years"), content.index(">2024<"))
+
+    def test_year_and_q_share_one_form(self):
+        content = self.get().content.decode()
+        self.assertEqual(content.count("<form"), 1)
+        self.assertLess(content.index('name="q"'), content.index("</form>"))
+        self.assertLess(content.index('name="year"'), content.index("</form>"))
+
+    def test_no_year_matches_the_unfiltered_list(self):
+        self.assertEqual(
+            self.titles(self.get()),
+            ["Kim", "Burmese Days", "Dune", "Animal Farm", "Emma", "Undated Orwell"],
+        )
+
+    def test_year_and_q_combine_with_and(self):
+        response = self.get(year="2023", q="orwell")
+        self.assertEqual(self.titles(response), ["Burmese Days", "Animal Farm"])
+
+    def test_year_options_are_not_narrowed_by_q_or_year(self):
+        self.assertEqual(self.get(q="kipling").context["years"], [2024, 2023, 2022])
+        self.assertEqual(self.get(year="2022").context["years"], [2024, 2023, 2022])
+
+    def test_form_is_prefilled_with_both_values(self):
+        response = self.get(year="2023", q="  orwell ")
+        self.assertContains(
+            response, '<option value="2023" selected>2023</option>', html=True
+        )
+        self.assertContains(response, 'value="orwell"')
+
+    def test_junk_year_is_ignored_and_q_still_applies(self):
+        junk = [
+            "",
+            "abc",
+            "0",
+            "-1",
+            "2023.0",
+            "20 23",
+            "1850",
+            "99999999999999999999",
+            "9" * 5000,
+            "٢٠٢٣",
+            " 2023",
+        ]
+        for value in junk:
+            with self.subTest(year=value[:30]):
+                response = self.get(year=value)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(len(response.context["books"]), 6)
+                self.assertNotContains(response, "finished in")
+                narrowed = self.get(year=value, q="orwell")
+                self.assertEqual(
+                    self.titles(narrowed),
+                    ["Burmese Days", "Animal Farm", "Undated Orwell"],
+                )
+
+    def test_repeated_year_uses_the_last_value(self):
+        response = self.client.get(reverse("club:history") + "?year=2022&year=2024")
+        self.assertEqual(self.titles(response), ["Kim"])
+
+    def test_result_lines(self):
+        self.assertContains(self.get(year="2023"), "3 books finished in 2023")
+        self.assertContains(self.get(year="2024"), "1 book finished in 2024")
+        self.assertContains(self.get(q="orwell"), "3 books match")
+        self.assertContains(
+            self.get(year="2023", q="orwell"),
+            "2 books finished in 2023 match 'orwell'",
+        )
+        self.assertContains(
+            self.get(year="2024", q="kim"),
+            "1 book finished in 2024 matches 'kim'",
+        )
+
+    def test_clear_link_shows_only_while_a_filter_is_active(self):
+        link = reverse("club:history")
+        self.assertContains(self.get(year="2023"), "Show all books")
+        self.assertContains(self.get(year="2023"), f'href="{link}"')
+        self.assertNotContains(self.get(), "Show all books")
+        self.assertNotContains(self.get(year="abc"), "Show all books")
+
+    def test_no_match_empty_state_names_year_and_query(self):
+        response = self.get(year="2022", q="orwell")
+        self.assertContains(response, "No book finished in 2022 matches")
+        self.assertContains(response, "orwell")
+        self.assertContains(response, "show all books")
+        self.assertNotContains(response, "has not finished a book yet")
+
+    def test_admin_edit_link_and_ratings_survive_the_filter(self):
+        member = Member.objects.create(name="Ada")
+        self.mid.ratings.create(member=member, score=4)
+        session = self.client.session
+        enter_admin(session)
+        session.save()
+        response = self.get(year="2023")
+        self.assertContains(response, reverse("club:book_edit", args=[self.mid.pk]))
+        self.assertContains(response, "members averaged 4.0")
+
+
+class HistoryYearQueryCountTests(TestCase):
+    """The cost is fixed whatever the number of books or years."""
+
+    COMBOS = [
+        {},
+        {"year": "2023"},
+        {"q": "orwell"},
+        {"year": "2023", "q": "orwell"},
+    ]
+
+    def queries_for(self, count, params):
+        Book.objects.all().delete()
+        member, _ = Member.objects.get_or_create(name="Ada")
+        for index in range(count):
+            book = Book.objects.create(
+                title=f"Orwell {index}",
+                author="George",
+                finished_on=date(2000 + index, 6, 1) if index % 2 else date(2023, 6, 1),
+            )
+            book.ratings.create(member=member, score=4)
+
+        with CaptureQueriesContext(connection) as captured:
+            response = self.client.get(reverse("club:history"), params)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["books"])
+        return len(captured)
+
+    def test_query_count_is_the_same_at_2_and_22_books(self):
+        for params in self.COMBOS:
+            with self.subTest(params=params):
+                self.assertEqual(
+                    self.queries_for(2, params), self.queries_for(22, params)
+                )
+
+    def test_books_plus_years_is_two_queries(self):
+        for index in range(2):
+            Book.objects.create(
+                title=f"Orwell {index}", author="G", finished_on=date(2023, 1, 1)
+            )
+        for params in self.COMBOS:
+            with self.subTest(params=params):
+                with self.assertNumQueries(2):
+                    self.client.get(reverse("club:history"), params)
 
 
 class ArchiveInMinutesTests(TestCase):
