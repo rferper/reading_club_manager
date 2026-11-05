@@ -15,6 +15,7 @@ is a new module and nothing else. What is there now:
 | `test_admin_pin.py` | the PIN form, the admin gate, what refusal means |
 | `test_identity.py` | session identity and the member gate |
 | `test_books.py` | the `Book` model and the current-read flag |
+| `test_duration.py` | the listening-time parser, formatter and form field |
 | `test_progress.py` | the `Progress` model, its derived percentage, the update form |
 | `test_progress_overview.py` | the group table, its ordering, its query count |
 | `test_notes.py` | the `Note` model, the notes page, who may remove one |

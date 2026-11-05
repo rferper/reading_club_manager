@@ -981,3 +981,54 @@ not. `member_id` survives the rotation.
 
 Still out: rate limiting after wrong PINs (#45), changing the PIN from the UI (#46), and
 any expiry warning or countdown.
+
+## 34. Audiobooks are measured in whole minutes, typed as "4h 12m"
+
+Settled while building #25. An audiobook's chapter breaks do not match the print
+edition, and a page count means nothing to someone listening. Time is its own
+measure.
+
+**Minutes are the stored unit.** `Book.total_minutes`, `Progress.minutes_read` and
+`ProgressEntry.minutes_read` are nullable `PositiveIntegerField`s, one column per
+unit as decision #25 settled. Minutes are never written into `pages_read` or
+`chapters_read`, and the migration is additive and rewrites no existing row. No
+`DurationField`, no seconds, no decimal hours, no third-party parser.
+
+**`Book.measure` gains a third answer.** `"minutes"` when `total_minutes` is set and
+positive, then `"chapters"`, then `"pages"`. A `total_minutes` of 0 reads as no
+duration, as decision #24 says of chapters, and the form refuses it outright. The
+`Book` check constraint now allows at most one of the three totals. The
+`ProgressEntry` constraint requires exactly one of its three columns. `Book.unit_column`
+names the `Progress` column a book is counted in, so no caller branches on the
+measure itself.
+
+**Accepted input**, case-insensitive with surrounding spaces ignored: `4h 12m`,
+`4h`, `12m`, `90m`, `4:12`, and a bare `0` for a recorded zero. Refused with a
+field error that shows an example: empty or non-time text, decimals such as `4.5h`,
+negatives, `0` as a book total, and minutes of 60 or more when hours are also given
+(`1h 75m`; `75m` alone is fine). The parser is a small regex function in
+`club/duration.py`, and `MinutesField` wraps it for the book form, the progress form
+and the admin forms, so all three take the same format and redisplay stored minutes
+as time.
+
+**One formatter.** `format_minutes` gives `4h 12m`, `3h`, `45m`, `0m`. The raw
+count is never shown to a member: not in the overview, the trail, the archive, the
+admin, the "You are ... in" sentence or a form error. Templates reach it through the
+`club_units` filters (`counted`, `counted_of_total`, `signed`), which call
+`Book.describe_units` and `Book.describe_change`.
+
+**The "other measure" sentence on the trail counts every other unit** (decision #27).
+It used to say pages or chapters. It now names each unit that the skipped entries
+were recorded in, joined with "and", and the unit the book is measured in now,
+where minutes read as "listening time": "recorded in pages, before this book was
+measured in listening time". The trail still lists one scale only.
+
+**A pages-only or chapters-only row on a minutes book reads as not started**
+(decision #19), and the overview stays at two queries.
+
+**`Progress` is registered in `/admin/`** so a row can be corrected in time. As with
+any direct admin edit, that moves the current value without a dot on the trail
+(decision #26).
+
+Out: ebook locations as a fourth measure, left to #47; converting a row between
+measures, left to #29 and #30; seconds, playback speed and per-chapter timestamps.
