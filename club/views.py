@@ -213,7 +213,7 @@ def member_list(request):
 @club_admin_required
 def member_add(request):
     """Put someone new on the roster."""
-    form = MemberForm(request.POST or None)
+    form = MemberForm(request.POST if request.method == "POST" else None)
 
     if request.method == "POST" and form.is_valid():
         member = form.save()
@@ -235,7 +235,7 @@ def member_add(request):
 def member_edit(request, pk):
     """Rename a member, or change the label their role is."""
     member = get_object_or_404(Member, pk=pk)
-    form = MemberForm(request.POST or None, instance=member)
+    form = MemberForm(request.POST if request.method == "POST" else None, instance=member)
 
     if request.method == "POST" and form.is_valid():
         member = form.save()
@@ -287,7 +287,7 @@ def identify(request):
 
     viewer = current_member(request)
     form = IdentityForm(
-        request.POST or None,
+        request.POST if request.method == "POST" else None,
         initial={"member": viewer} if viewer else None,
     )
 
@@ -348,7 +348,7 @@ def progress_update(request):
     progress = Progress.objects.filter(book=book, member=member).first() or Progress(
         book=book, member=member
     )
-    form = ProgressForm(request.POST or None, instance=progress, book=book)
+    form = ProgressForm(request.POST if request.method == "POST" else None, instance=progress, book=book)
 
     if request.method == "POST" and form.is_valid():
         # `commit=False` and then `record()`, because saving the row and
@@ -788,7 +788,7 @@ def question_add(request):
 
     last = book.questions.aggregate(models.Max("position"))["position__max"] or 0
     form = QuestionForm(
-        request.POST or None, initial={"position": last + 1}, book=book
+        request.POST if request.method == "POST" else None, initial={"position": last + 1}, book=book
     )
 
     if request.method == "POST" and form.is_valid():
@@ -814,7 +814,7 @@ def question_add(request):
 def question_edit(request, pk):
     """Reword a question, or move it in the sequence."""
     question = get_object_or_404(Question, pk=pk)
-    form = QuestionForm(request.POST or None, instance=question, book=question.book)
+    form = QuestionForm(request.POST if request.method == "POST" else None, instance=question, book=question.book)
 
     if request.method == "POST" and form.is_valid():
         form.save()
@@ -970,7 +970,7 @@ def book_start(request):
         return redirect("club:home")
 
     form = BookForm(
-        request.POST or None, initial={"started_on": timezone.localdate()}
+        request.POST if request.method == "POST" else None, initial={"started_on": timezone.localdate()}
     )
 
     if request.method == "POST" and form.is_valid():
@@ -1008,7 +1008,7 @@ def book_finish(request, pk):
     """
     book = get_object_or_404(Book, pk=pk, is_current=True)
     form = BookFinishForm(
-        request.POST or None,
+        request.POST if request.method == "POST" else None,
         instance=book,
         initial={"finished_on": timezone.localdate()},
     )
@@ -1074,7 +1074,7 @@ def book_edit(request, pk):
     is where the rule about there being one of them lives.
     """
     book = get_object_or_404(Book, pk=pk)
-    form = BookEditForm(request.POST or None, instance=book)
+    form = BookEditForm(request.POST if request.method == "POST" else None, instance=book)
 
     if request.method == "POST" and form.is_valid():
         book = form.save()
@@ -1140,7 +1140,7 @@ def book_rate(request, pk):
 
     member = current_member(request)
     mine = MemberRating.objects.filter(book=book, member=member).first()
-    form = MemberRatingForm(request.POST or None, initial=_rating_initial(mine))
+    form = MemberRatingForm(request.POST if request.method == "POST" else None, initial=_rating_initial(mine))
 
     if request.method == "POST" and form.is_valid():
         MemberRating.objects.update_or_create(
