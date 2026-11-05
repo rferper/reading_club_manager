@@ -20,6 +20,7 @@ is a new module and nothing else. What is there now:
 | `test_progress_trail.py` | one member's trail through a book, and removing an older entry from it |
 | `test_progress_overview.py` | the group table, its ordering, its "This week" movement cell, its query count |
 | `test_notes.py` | the `Note` model, the notes page, who may remove one |
+| `test_reactions.py` | the `Reaction` model, the Agree toggle and its refusals, the count and the notes page query pin |
 | `test_questions.py` | the `Question` model, its order, the admin-only controls |
 | `test_answers.py` | the `Answer` model, its one-per-member rule, the answer forms |
 | `test_history.py` | finishing a book, the archive, and what survives the move |
