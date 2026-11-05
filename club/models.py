@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.db.models.functions import Lower
@@ -445,6 +446,16 @@ class Note(models.Model):
     # where a fixture or a shell would otherwise walk straight past the first.
     author = models.ForeignKey(Member, on_delete=models.PROTECT, related_name="notes")
 
+    # One level of replies (decision #28). Null for a top-level note. CASCADE:
+    # a reply answers one note and reads as nonsense without it.
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="replies",
+    )
+
     body = models.TextField()
     created_on = models.DateTimeField(auto_now_add=True)
 
@@ -455,6 +466,24 @@ class Note(models.Model):
 
     def __str__(self):
         return f"{self.author} on {self.book.title}"
+
+    def clean(self):
+        """A reply sits under a top-level note on the same book.
+
+        Both rules compare this row to another row, which a `CheckConstraint`
+        cannot do, so they live here and in `ReplyForm` — decision #28.
+        """
+        super().clean()
+
+        parent = self.parent
+        if parent is None:
+            return
+
+        if parent.parent_id is not None:
+            raise ValidationError("A reply cannot be replied to.")
+
+        if self.book_id is not None and parent.book_id != self.book_id:
+            raise ValidationError("A reply belongs to the same book as its note.")
 
     def may_be_removed_by(self, member, is_admin):
         """Whether this viewer may remove this note — decision #7.
