@@ -1101,3 +1101,24 @@ class EmptyFinishPostTests(TestCase):
         book.refresh_from_db()
         self.assertTrue(book.is_current)
         self.assertIsNone(book.finished_on)
+
+
+class HistoryDetailNotStartedTests(TestCase):
+    """#30: the archive draws no percentage for a count that was never recorded."""
+
+    def test_a_null_count_shows_not_started_and_no_percent(self):
+        book = Book.objects.create(
+            title="Middlemarch",
+            author="George Eliot",
+            total_chapters=30,
+            started_on=date(2025, 6, 1),
+            finished_on=date(2025, 7, 1),
+        )
+        ada = Member.objects.create(name="Ada")
+        # Pages only, on a book now measured in chapters: nothing recorded.
+        Progress.objects.create(book=book, member=ada, pages_read=100)
+
+        response = self.client.get(reverse("club:history_detail", args=[book.pk]))
+
+        self.assertContains(response, "not started")
+        self.assertNotContains(response, "0%")
