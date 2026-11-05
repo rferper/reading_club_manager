@@ -1,3 +1,4 @@
+import datetime
 import hmac
 from urllib.parse import urlsplit
 
@@ -46,7 +47,62 @@ def home(request):
     Between reads is a legitimate state (decision #2), so `current()` answering
     None is the empty state and not an error.
     """
-    return render(request, "club/home.html", {"book": Book.objects.current()})
+    book = Book.objects.current()
+    return render(
+        request,
+        "club/home.html",
+        {"book": book, "whats_new": _whats_new(book, current_member(request))},
+    )
+
+
+def _whats_new(book, member):
+    """What happened on the current book since `member` last looked, or None.
+
+    None means there is nothing to show: no book, nobody identified, or nothing
+    new. The marker is `notifications_seen_at`, or the start of `joined_on`
+    when it is null (decision #31). Answers use `created_on`, so editing one
+    later does not bring it back, and the member's own never count.
+    """
+    if book is None or member is None:
+        return None
+
+    since = member.notifications_seen_at
+    if since is None:
+        since = timezone.make_aware(
+            datetime.datetime.combine(member.joined_on, datetime.time.min)
+        )
+
+    new_questions = list(book.questions.filter(created_on__gt=since))
+    new_answers = (
+        Answer.objects.filter(question__book=book, created_on__gt=since)
+        .exclude(member=member)
+        .count()
+    )
+    book_is_new = book.created_on > since
+
+    if not (new_questions or new_answers or book_is_new):
+        return None
+
+    return {
+        "questions": new_questions,
+        "answer_count": new_answers,
+        "new_book": book if book_is_new else None,
+    }
+
+
+@require_POST
+def mark_seen(request):
+    """Stamp the viewer's marker so the home panel clears.
+
+    Not gated with `require_member`: with nobody identified there is nothing to
+    stamp, and the caller wanted the panel gone either way, so it quietly
+    redirects. This is the only place the marker is ever written.
+    """
+    member = current_member(request)
+    if member is not None:
+        member.notifications_seen_at = timezone.now()
+        member.save(update_fields=["notifications_seen_at"])
+    return redirect("club:home")
 
 
 def _safe_next(request, next_url):
