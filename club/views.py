@@ -927,6 +927,46 @@ def book_finish(request, pk):
 
 
 @club_admin_required
+def book_reopen(request, pk):
+    """Make a finished book the current read again - the inverse of finish.
+
+    Only the flag and `finished_on` move. The rating, per-member scores and the
+    whole discussion stay on the row, so re-finishing picks up where it left
+    off. Refused while another book is current: the partial unique index allows
+    one, and the admin decides which book to set aside (decision #30).
+    """
+    book = get_object_or_404(Book, pk=pk, is_current=False)
+    other = Book.objects.current()
+
+    if request.method == "POST":
+        if other is not None:
+            messages.error(
+                request,
+                f"{other.title} is the current read. Finish it before "
+                f"reopening {book.title}.",
+            )
+            return redirect("club:book_reopen", pk=book.pk)
+
+        try:
+            with transaction.atomic():
+                book.is_current = True
+                book.finished_on = None
+                book.save(update_fields=["is_current", "finished_on"])
+        except IntegrityError:
+            messages.error(
+                request,
+                f"Another book became the current read. Nothing changed "
+                f"for {book.title}.",
+            )
+            return redirect("club:book_reopen", pk=book.pk)
+
+        messages.success(request, f"{book.title} is the current read again.")
+        return redirect("club:home")
+
+    return render(request, "club/book_reopen.html", {"book": book, "other": other})
+
+
+@club_admin_required
 def book_edit(request, pk):
     """Correct a book's metadata, current or archived.
 

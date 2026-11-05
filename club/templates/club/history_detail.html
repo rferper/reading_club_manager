@@ -31,6 +31,9 @@
   {% if is_club_admin %}
     <p>
       <a class="admin-only" href="{% url 'club:book_edit' book.pk %}">Edit this entry</a>
+      {% if not book.is_current %}
+        · <a class="admin-only" href="{% url 'club:book_reopen' book.pk %}">Reopen</a>
+      {% endif %}
     </p>
   {% endif %}
 
