@@ -90,15 +90,33 @@ def _whats_new(book, member):
         .exclude(member=member)
         .count()
     )
+    # One query for both counts: other members' new top-level notes and new
+    # note replies on this book (#40). Answer replies are not counted (#60).
+    new_notes = (
+        Note.objects.filter(book=book, created_on__gt=since)
+        .exclude(author=member)
+        .aggregate(
+            notes=Count("pk", filter=Q(parent__isnull=True)),
+            replies=Count("pk", filter=Q(parent__isnull=False)),
+        )
+    )
     book_is_new = book.created_on > since
 
-    if not (new_questions or new_answers or book_is_new):
+    if not (
+        new_questions
+        or new_answers
+        or book_is_new
+        or new_notes["notes"]
+        or new_notes["replies"]
+    ):
         return None
 
     return {
         "questions": new_questions,
         "answer_count": new_answers,
         "new_book": book if book_is_new else None,
+        "note_count": new_notes["notes"],
+        "reply_count": new_notes["replies"],
     }
 
 
