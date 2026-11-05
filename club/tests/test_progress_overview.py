@@ -432,3 +432,91 @@ class ProgressOverviewLinksTests(TestCase):
 
         self.assertContains(response, "Say who you are")
         self.assertNotContains(response, reverse("club:progress_update"))
+
+
+class ProgressOverviewInMinutesTests(TestCase):
+    """An audiobook: time listened, shown as time (decision #34)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.book = Book.objects.create(
+            title="Piranesi",
+            author="Susanna Clarke",
+            total_minutes=750,
+            is_current=True,
+        )
+        cls.ada = Member.objects.create(name="Ada")
+        cls.bob = Member.objects.create(name="Bob")
+        cls.cleo = Member.objects.create(name="Cleo")
+        cls.dev = Member.objects.create(name="Dev")
+
+        Progress.objects.create(book=cls.book, member=cls.ada, minutes_read=252)
+        Progress.objects.create(book=cls.book, member=cls.bob, minutes_read=0)
+        # A row from before the book was measured in time: pages only.
+        Progress.objects.create(book=cls.book, member=cls.cleo, pages_read=431)
+
+    def _get(self):
+        return self.client.get(reverse("club:progress"))
+
+    def test_progress_and_total_are_shown_as_time(self):
+        response = self._get()
+
+        self.assertContains(response, "4h 12m of 12h 30m")
+        self.assertContains(response, "34%")
+        self.assertContains(response, "12h 30m")
+        self.assertNotContains(response, "252")
+        self.assertNotContains(response, "750")
+
+    def test_a_recorded_zero_is_shown_as_zero_minutes_and_zero_percent(self):
+        response = self._get()
+
+        self.assertContains(response, "0m of 12h 30m")
+        self.assertContains(response, "0%")
+
+    def test_ordering_puts_furthest_along_first_and_unrecorded_last(self):
+        names = [row["member"].name for row in self._get().context["rows"]]
+
+        self.assertEqual(names, ["Ada", "Bob", "Cleo", "Dev"])
+
+    def test_a_pages_only_legacy_row_reads_as_not_started(self):
+        rows = {row["member"].name: row for row in self._get().context["rows"]}
+
+        self.assertIs(rows["Cleo"]["has_recorded"], False)
+        self.assertIs(rows["Dev"]["has_recorded"], False)
+        self.assertIs(rows["Bob"]["has_recorded"], True)
+        self.assertContains(self._get(), "not started")
+
+    def test_nobody_who_has_recorded_nothing_shows_zero_minutes(self):
+        html = self._get().content.decode()
+        cleo_row = html.split("Cleo")[1].split("</tr>")[0]
+
+        self.assertIn("not started", cleo_row)
+        self.assertNotIn("0m", cleo_row)
+
+
+class ProgressOverviewInMinutesQueryCountTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.book = Book.objects.create(
+            title="Piranesi",
+            author="Susanna Clarke",
+            total_minutes=750,
+            is_current=True,
+        )
+
+    def _add_members(self, count):
+        start = Member.objects.count()
+        for index in range(start, start + count):
+            member = Member.objects.create(name=f"Member {index:02d}")
+            Progress(book=self.book, member=member, minutes_read=60).record()
+
+    def test_the_query_count_does_not_grow_with_the_roster(self):
+        self._add_members(2)
+        with self.assertNumQueries(2):
+            self.client.get(reverse("club:progress"))
+
+        self._add_members(20)
+        with self.assertNumQueries(2):
+            response = self.client.get(reverse("club:progress"))
+
+        self.assertEqual(len(response.context["rows"]), 22)

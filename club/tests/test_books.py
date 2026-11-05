@@ -210,7 +210,8 @@ class BookMeasureTests(TestCase):
             ).full_clean()
 
         self.assertIn(
-            "A book is measured in pages or in chapters, not both.",
+            "A book is measured in pages, chapters or listening time "
+            "- one of them, never more than one.",
             caught.exception.message_dict[NON_FIELD_ERRORS],
         )
 
@@ -311,7 +312,7 @@ class BookAdminTests(TestCase):
         # The leading entry is Django's own action checkbox, which is here
         # because books, unlike members, may be deleted.
         self.assertEqual(
-            tuple(response.context["cl"].list_display)[-8:],
+            tuple(response.context["cl"].list_display)[-9:],
             (
                 "title",
                 "author",
@@ -321,6 +322,7 @@ class BookAdminTests(TestCase):
                 "rating",
                 "total_pages",
                 "total_chapters",
+                "listening_time",
             ),
         )
         self.assertContains(response, "Middlemarch")
@@ -495,3 +497,104 @@ class BookReopenTests(TestCase):
         self.book.refresh_from_db()
         self.assertFalse(self.book.is_current)
         self.assertEqual(self.book.finished_on, date(2025, 12, 1))
+
+
+class BookMinutesTests(TestCase):
+    """Total listening time on the book: the column, the constraint, the form."""
+
+    def test_a_positive_total_makes_the_book_minutes_measured(self):
+        book = Book(title="Piranesi", author="A", total_minutes=750)
+
+        self.assertEqual(book.measure, "minutes")
+        self.assertEqual(book.total_units, 750)
+
+    def test_a_total_of_zero_reads_as_no_duration(self):
+        book = Book(title="Zero", author="A", total_minutes=0, total_pages=200)
+
+        self.assertEqual(book.measure, "pages")
+        self.assertEqual(book.total_units, 200)
+
+    def test_the_constraint_refuses_minutes_with_pages_or_chapters(self):
+        for extra in ({"total_pages": 200}, {"total_chapters": 30}):
+            with self.subTest(extra=extra):
+                with self.assertRaises(IntegrityError), transaction.atomic():
+                    Book.objects.create(
+                        title="Both", author="A", total_minutes=750, **extra
+                    )
+
+    def test_the_constraint_message_names_all_three_measures(self):
+        with self.assertRaises(ValidationError) as caught:
+            Book(
+                title="Both", author="A", total_pages=880, total_minutes=750
+            ).full_clean()
+
+        self.assertIn(
+            "A book is measured in pages, chapters or listening time "
+            "- one of them, never more than one.",
+            caught.exception.message_dict[NON_FIELD_ERRORS],
+        )
+
+
+class BookMinutesFormTests(TestCase):
+    """The admin book form's "Total listening time" field."""
+
+    def setUp(self):
+        session = self.client.session
+        enter_admin(session)
+        session.save()
+
+    def _start(self, **data):
+        return self.client.post(
+            reverse("club:book_start"),
+            {"title": "Piranesi", "author": "Susanna Clarke", **data},
+            follow=True,
+        )
+
+    def test_an_admin_can_start_an_audiobook_with_a_listening_time(self):
+        response = self._start(total_minutes="12h 30m")
+
+        self.assertEqual(Book.objects.get().total_minutes, 750)
+        self.assertContains(response, "12h 30m")
+        self.assertNotContains(response, "750")
+
+    def test_the_other_accepted_forms_are_accepted(self):
+        for text, minutes in (("90m", 90), ("4:12", 252), ("3H", 180)):
+            with self.subTest(text=text):
+                Book.objects.all().delete()
+                self._start(total_minutes=text)
+                self.assertEqual(Book.objects.get().total_minutes, minutes)
+
+    def test_zero_for_a_total_is_a_field_error(self):
+        response = self._start(total_minutes="0")
+
+        self.assertFalse(Book.objects.exists())
+        self.assertContains(response, "more than zero")
+
+    def test_decimals_are_a_field_error_with_an_example(self):
+        response = self._start(total_minutes="4.5h")
+
+        self.assertFalse(Book.objects.exists())
+        self.assertContains(response, "4h 12m")
+
+    def test_a_duration_with_pages_is_refused_naming_which_to_keep(self):
+        response = self._start(total_minutes="12h", total_pages="300")
+
+        self.assertFalse(Book.objects.exists())
+        self.assertContains(response, "pages or in listening time, not both")
+
+    def test_a_duration_with_chapters_is_refused_and_nothing_is_saved(self):
+        response = self._start(total_minutes="12h", total_chapters="30")
+
+        self.assertFalse(Book.objects.exists())
+        self.assertContains(response, "chapters or in listening time, not both")
+
+    def test_the_edit_form_shows_the_stored_time_as_time(self):
+        book = Book.objects.create(
+            title="Piranesi", author="A", total_minutes=252, finished_on=date(2025, 1, 1)
+        )
+
+        response = self.client.get(reverse("club:book_edit", args=[book.pk]))
+
+        self.assertEqual(
+            response.context["form"]["total_minutes"].value(), "4h 12m"
+        )

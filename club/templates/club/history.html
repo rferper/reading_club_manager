@@ -1,4 +1,5 @@
 {% extends "club/base.html" %}
+{% load club_units %}
 
 {% block title %}History — Reading Club Manager{% endblock %}
 
@@ -39,7 +40,7 @@
         {% else %}
           · no finish date recorded
         {% endif %}
-        {% if book.total_units %}· {{ book.total_units }} {{ book.measure }}{% endif %}
+        {% if book.total_units %}· {{ book.total_units|counted:book }}{% endif %}
         {% if book.rating %}· the club said {{ book.rating }} out of 5{% endif %}
         {% if book.member_rating_count %}
           · members averaged {{ book.member_rating_average|floatformat:1 }}

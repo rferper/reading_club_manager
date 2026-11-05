@@ -612,7 +612,7 @@ class ProgressEntryModelTests(TestCase):
         with self.assertRaises(ValidationError) as raised:
             entry.full_clean()
 
-        self.assertIn("one of the two", " ".join(raised.exception.messages))
+        self.assertIn("exactly one of the three", " ".join(raised.exception.messages))
 
     def test_entries_come_back_newest_first(self):
         first = ProgressEntry.objects.create(progress=self.progress, pages_read=100)
@@ -959,3 +959,236 @@ class ProgressEntryBackfillTests(TestCase):
 
         self.assertEqual(ProgressEntry.objects.count(), 0)
         self.assertTrue(Progress.objects.filter(pk=progress.pk).exists())
+
+
+class MinutesConstraintTests(TestCase):
+    """The database says one measure per entry, and one per book (decision #34)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.book = Book.objects.create(
+            title="Piranesi", author="Susanna Clarke", total_minutes=750
+        )
+        cls.progress = Progress.objects.create(book=cls.book, member=cls.ada)
+
+    def _refused(self, **counts):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ProgressEntry.objects.create(progress=self.progress, **counts)
+
+    def test_an_entry_carrying_minutes_alone_is_fine(self):
+        ProgressEntry.objects.create(progress=self.progress, minutes_read=252)
+
+    def test_an_entry_carrying_minutes_and_pages_is_refused(self):
+        self._refused(minutes_read=252, pages_read=10)
+
+    def test_an_entry_carrying_minutes_and_chapters_is_refused(self):
+        self._refused(minutes_read=252, chapters_read=3)
+
+    def test_an_entry_carrying_all_three_is_refused(self):
+        self._refused(minutes_read=252, chapters_read=3, pages_read=10)
+
+    def test_an_entry_carrying_nothing_is_refused(self):
+        self._refused()
+
+    def test_the_constraint_message_names_all_three_measures(self):
+        entry = ProgressEntry(progress=self.progress, minutes_read=1, pages_read=1)
+
+        with self.assertRaises(ValidationError) as raised:
+            entry.full_clean()
+
+        self.assertIn("exactly one of the three", " ".join(raised.exception.messages))
+
+
+class MinutesProgressTests(TestCase):
+    """A book measured in listening time: the form, the row and the trail."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.book = Book.objects.create(
+            title="Piranesi",
+            author="Susanna Clarke",
+            total_minutes=750,
+            started_on=date(2025, 9, 1),
+            is_current=True,
+        )
+
+    def setUp(self):
+        session = self.client.session
+        session["member_id"] = self.ada.pk
+        session.save()
+
+    def _post(self, **data):
+        return self.client.post(reverse("club:progress_update"), data, follow=True)
+
+    def test_the_form_asks_for_time_listened_only(self):
+        response = self.client.get(reverse("club:progress_update"))
+
+        self.assertEqual(list(response.context["form"].fields), ["minutes_read"])
+        self.assertContains(response, "Time listened")
+        self.assertContains(response, "Out of 12h 30m")
+        self.assertNotContains(response, "750")
+
+    def test_recording_4h_12m_stores_252_and_leaves_the_other_columns_alone(self):
+        Progress.objects.create(
+            book=self.book, member=self.ada, pages_read=431, chapters_read=7
+        )
+
+        response = self._post(minutes_read="4h 12m")
+
+        progress = Progress.objects.get(book=self.book, member=self.ada)
+        self.assertEqual(progress.minutes_read, 252)
+        self.assertEqual(progress.pages_read, 431)
+        self.assertEqual(progress.chapters_read, 7)
+        self.assertContains(response, "You are 4h 12m in")
+        self.assertNotContains(response, "252")
+
+    def test_the_form_redisplays_the_stored_time_as_time(self):
+        self._post(minutes_read="4h 12m")
+
+        response = self.client.get(reverse("club:progress_update"))
+
+        self.assertEqual(response.context["form"]["minutes_read"].value(), "4h 12m")
+        self.assertContains(response, "You last recorded 4h 12m")
+        self.assertNotContains(response, "252")
+
+    def test_the_percentage_is_minutes_against_minutes_in_the_book(self):
+        progress = Progress(book=self.book, member=self.ada, minutes_read=375)
+
+        self.assertEqual(progress.percent, 50)
+        self.assertEqual(progress.units_read, 375)
+
+    def test_hand_posted_pages_and_chapters_are_ignored(self):
+        Progress.objects.create(book=self.book, member=self.ada, pages_read=431)
+
+        self._post(minutes_read="30m", pages_read="999", chapters_read="9")
+
+        progress = Progress.objects.get(book=self.book, member=self.ada)
+        self.assertEqual(progress.pages_read, 431)
+        self.assertIsNone(progress.chapters_read)
+        self.assertEqual(progress.minutes_read, 30)
+
+    def test_a_value_above_the_total_is_refused_with_the_books_length(self):
+        response = self._post(minutes_read="13h")
+
+        self.assertContains(response, "Piranesi is only 12h 30m long.")
+        self.assertFalse(Progress.objects.exists())
+
+    def test_the_total_itself_is_accepted(self):
+        self._post(minutes_read="12h 30m")
+
+        self.assertEqual(Progress.objects.get().minutes_read, 750)
+
+    def test_zero_is_accepted_and_stored_as_a_recorded_zero(self):
+        self._post(minutes_read="0")
+
+        progress = Progress.objects.get()
+        self.assertEqual(progress.minutes_read, 0)
+        self.assertEqual(progress.units_read, 0)
+
+    def test_non_time_text_is_a_field_error_with_an_example(self):
+        response = self._post(minutes_read="4.5h")
+
+        self.assertContains(response, "4h 12m")
+        self.assertFalse(Progress.objects.exists())
+
+    def test_the_entry_carries_minutes_and_nothing_else(self):
+        self._post(minutes_read="4h 12m")
+
+        entry = ProgressEntry.objects.get()
+        self.assertEqual(entry.minutes_read, 252)
+        self.assertIsNone(entry.pages_read)
+        self.assertIsNone(entry.chapters_read)
+
+    def test_an_unchanged_resubmission_appends_nothing(self):
+        self._post(minutes_read="4h 12m")
+        self._post(minutes_read="252m")
+
+        self.assertEqual(ProgressEntry.objects.count(), 1)
+
+    def test_a_changed_resubmission_appends_a_second_entry(self):
+        self._post(minutes_read="4h 12m")
+        self._post(minutes_read="5h")
+
+        self.assertEqual(
+            sorted(ProgressEntry.objects.values_list("minutes_read", flat=True)),
+            [252, 300],
+        )
+
+    def test_a_pages_only_row_reads_as_nothing_recorded(self):
+        progress = Progress(book=self.book, member=self.ada, pages_read=431)
+
+        self.assertIsNone(progress.units_read)
+        self.assertIsNone(progress.percent)
+
+    def test_the_book_measures_in_minutes_only_when_the_total_is_positive(self):
+        self.assertEqual(self.book.measure, "minutes")
+        self.assertEqual(self.book.total_units, 750)
+
+        zero = Book(title="Zero", author="A", total_minutes=0, total_chapters=5)
+        self.assertEqual(zero.measure, "chapters")
+
+        nothing = Book(title="Nothing", author="A", total_minutes=0)
+        self.assertEqual(nothing.measure, "pages")
+
+    def test_the_default_ordering_puts_furthest_along_first_nulls_last(self):
+        bo = Member.objects.create(name="Bo")
+        cy = Member.objects.create(name="Cy")
+        di = Member.objects.create(name="Di")
+        Progress.objects.create(book=self.book, member=self.ada, minutes_read=100)
+        Progress.objects.create(book=self.book, member=bo, minutes_read=600)
+        Progress.objects.create(book=self.book, member=cy, pages_read=900)
+        Progress.objects.create(book=self.book, member=di, minutes_read=0)
+
+        self.assertEqual(
+            [p.member.name for p in self.book.progress.select_related("member")],
+            ["Bo", "Ada", "Di", "Cy"],
+        )
+
+
+class MinutesAdminTests(TestCase):
+    """`/admin/` edits a progress row, and a book's total, in time."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.contrib.auth.models import User
+
+        cls.superuser = User.objects.create_superuser("root", "r@example.com", "pw")
+        cls.ada = Member.objects.create(name="Ada")
+        cls.book = Book.objects.create(
+            title="Piranesi", author="A", total_minutes=750
+        )
+        cls.progress = Progress.objects.create(
+            book=cls.book, member=cls.ada, minutes_read=252
+        )
+
+    def setUp(self):
+        self.client.force_login(self.superuser)
+
+    def test_the_progress_changelist_shows_time(self):
+        response = self.client.get(reverse("admin:club_progress_changelist"))
+
+        self.assertContains(response, "4h 12m of 12h 30m")
+        self.assertNotContains(response, "252")
+
+    def test_a_progress_row_can_be_edited_in_minutes(self):
+        url = reverse("admin:club_progress_change", args=[self.progress.pk])
+        response = self.client.get(url)
+        self.assertEqual(
+            response.context["adminform"].form["minutes_read"].value(), "4h 12m"
+        )
+
+        self.client.post(
+            url,
+            {"book": self.book.pk, "member": self.ada.pk, "pages_read": 0,
+             "chapters_read": "", "minutes_read": "5h"},
+        )
+
+        self.progress.refresh_from_db()
+        self.assertEqual(self.progress.minutes_read, 300)
+
+    def test_the_book_changelist_shows_the_total_as_time(self):
+        response = self.client.get(reverse("admin:club_book_changelist"))
+
+        self.assertContains(response, "12h 30m")

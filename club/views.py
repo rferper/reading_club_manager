@@ -38,6 +38,7 @@ from .identity import (
     remember_member,
 )
 from .models import (
+    MEASURE_LABELS,
     Answer,
     Book,
     Member,
@@ -358,7 +359,8 @@ def progress_update(request):
         progress.record()
         # Never a bare count: the unit is part of the sentence, because "12"
         # means nothing on a book measured in chapters or in anything else.
-        counted = f"You are {progress.units_read} {book.measure} in"
+        # Minutes are said as time ("4h 12m"), never as a raw count.
+        counted = f"You are {book.describe_units(progress.units_read)} in"
         if progress.percent is None:
             messages.success(request, f"{counted}.")
         else:
@@ -393,7 +395,7 @@ def progress_overview(request):
     rows = []
 
     if book is not None:
-        unit_column = "chapters_read" if book.measure == "chapters" else "pages_read"
+        unit_column = book.unit_column
         members = (
             Member.objects.filter(is_active=True)
             .annotate(
@@ -455,14 +457,26 @@ def progress_trail(request, pk, member_pk):
 
     rows = []
     recorded_in_other_unit = 0
+    other_measure = ""
 
     if progress is not None:
-        column = "chapters_read" if book.measure == "chapters" else "pages_read"
+        column = book.unit_column
         entries = list(progress.entries.select_related("progress__book"))
         on_this_scale = [
             entry for entry in entries if getattr(entry, column) is not None
         ]
         recorded_in_other_unit = len(entries) - len(on_this_scale)
+        other_columns = {
+            name
+            for entry in entries
+            for name in Book.READ_COLUMNS.values()
+            if name != column and getattr(entry, name) is not None
+        }
+        other_measure = " and ".join(
+            label
+            for measure, label in MEASURE_LABELS.items()
+            if Book.READ_COLUMNS[measure] in other_columns
+        )
 
         for index, entry in enumerate(on_this_scale):
             # Newest first, so the entry to compare against is the next one
@@ -499,7 +513,8 @@ def progress_trail(request, pk, member_pk):
             "progress": progress,
             "rows": rows,
             "recorded_in_other_unit": recorded_in_other_unit,
-            "other_measure": "pages" if book.measure == "chapters" else "chapters",
+            "other_measure": other_measure,
+            "measure_label": MEASURE_LABELS[book.measure],
         },
     )
 

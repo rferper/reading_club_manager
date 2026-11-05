@@ -1,4 +1,5 @@
 {% extends "club/base.html" %}
+{% load club_units %}
 
 {% block title %}Progress — Reading Club Manager{% endblock %}
 
@@ -17,7 +18,7 @@
     </p>
   {% else %}
     <p class="byline">
-      {{ book.title }} by {{ book.author }}{% if book.total_units %}, {{ book.total_units }} {{ book.measure }}{% endif %}
+      {{ book.title }} by {{ book.author }}{% if book.total_units %}, {{ book.total_units|counted:book }}{% endif %}
     </p>
 
     <table class="progress-table">
@@ -47,7 +48,7 @@
                   because "12" means nothing on a book measured in
                   chapters. Design system: never a bare zero either.
                 {% endcomment %}
-                {{ row.units_read }}{% if book.total_units %} of {{ book.total_units }}{% endif %} {{ book.measure }}
+                {{ row.units_read|counted_of_total:book }}
               {% else %}
                 <span class="empty">not started</span>
               {% endif %}

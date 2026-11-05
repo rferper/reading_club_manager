@@ -4,6 +4,13 @@ from django.db import models, transaction
 from django.db.models.functions import Lower
 from django.utils import timezone
 
+from .duration import format_minutes
+
+
+# How each measure reads in a sentence about the unit itself ("recorded in
+# pages, before this book was measured in listening time").
+MEASURE_LABELS = {"pages": "pages", "chapters": "chapters", "minutes": "listening time"}
+
 
 class Member(models.Model):
     """Someone in the club.
@@ -81,6 +88,10 @@ class Book(models.Model):
     # the form that remembered to ask.
     total_chapters = models.PositiveIntegerField(null=True, blank=True)
 
+    # The third denominator, for an audiobook: total listening time in whole
+    # minutes (decision #34). Shown everywhere as "Xh Ym", never as this number.
+    total_minutes = models.PositiveIntegerField(null=True, blank=True)
+
     started_on = models.DateField(null=True, blank=True)
     finished_on = models.DateField(null=True, blank=True)
 
@@ -132,11 +143,15 @@ class Book(models.Model):
             # that remembered it is not a rule, and a fixture, a shell or a
             # future management command all walk straight past a form.
             models.CheckConstraint(
-                condition=models.Q(total_pages__isnull=True)
-                | models.Q(total_chapters__isnull=True),
+                condition=models.Q(
+                    total_pages__isnull=True, total_chapters__isnull=True
+                )
+                | models.Q(total_pages__isnull=True, total_minutes__isnull=True)
+                | models.Q(total_chapters__isnull=True, total_minutes__isnull=True),
                 name="book_has_one_denominator",
                 violation_error_message=(
-                    "A book is measured in pages or in chapters, not both."
+                    "A book is measured in pages, chapters or listening time "
+                    "- one of them, never more than one."
                 ),
             ),
         ]
@@ -146,7 +161,7 @@ class Book(models.Model):
 
     @property
     def measure(self):
-        """What this book is measured in: ``"chapters"`` or ``"pages"``.
+        """What this book is measured in: ``"minutes"``, ``"chapters"`` or ``"pages"``.
 
         Pages are the default, so a book with neither count behaves exactly as
         it always has. A chapter count of zero is a typo rather than a book —
@@ -156,16 +171,64 @@ class Book(models.Model):
         Plural, because that is how every template and message uses it: "12 of
         30 chapters", "You are 440 pages in".
         """
+        if self.total_minutes:
+            return "minutes"
+
         return "chapters" if self.total_chapters else "pages"
+
+    TOTAL_COLUMNS = {
+        "minutes": "total_minutes",
+        "chapters": "total_chapters",
+        "pages": "total_pages",
+    }
+    READ_COLUMNS = {
+        "minutes": "minutes_read",
+        "chapters": "chapters_read",
+        "pages": "pages_read",
+    }
 
     @property
     def total_units(self):
         """The denominator this book carries, or ``None``.
 
-        The one place the choice between the two columns is made for a book,
+        The one place the choice between the columns is made for a book,
         so no caller has to make it again.
         """
-        return self.total_chapters if self.measure == "chapters" else self.total_pages
+        return getattr(self, self.TOTAL_COLUMNS[self.measure])
+
+    @property
+    def unit_column(self):
+        """The `Progress` / `ProgressEntry` column this book is counted in."""
+        return self.READ_COLUMNS[self.measure]
+
+    def describe_units(self, units, *, with_total=False):
+        """``units`` as a member reads it: "604 pages", "4h 12m".
+
+        With ``with_total`` and a total on the book, "604 of 880 pages" and
+        "4h 12m of 12h 30m". Minutes go through `format_minutes` and the raw
+        count is never shown (decision #34).
+        """
+        if self.measure == "minutes":
+            text = format_minutes(units)
+
+            if with_total and self.total_units:
+                text += f" of {format_minutes(self.total_units)}"
+
+            return text
+
+        if with_total and self.total_units:
+            return f"{units} of {self.total_units} {self.measure}"
+
+        return f"{units} {self.measure}"
+
+    def describe_change(self, change):
+        """A signed difference: "+293 pages", "-45m", "+1h 5m"."""
+        sign = "+" if change > 0 else "-" if change < 0 else ""
+
+        if self.measure == "minutes":
+            return f"{sign}{format_minutes(abs(change))}"
+
+        return f"{sign}{abs(change)} {self.measure}"
 
     def percent_of(self, units_read):
         """Whole percent of this book that ``units_read`` covers, or ``None``.
@@ -228,6 +291,10 @@ class Progress(models.Model):
     )
     pages_read = models.PositiveIntegerField(default=0)
     chapters_read = models.PositiveIntegerField(null=True, blank=True)
+
+    # Whole minutes listened, nullable for the same reason as `chapters_read`
+    # (decisions #25 and #34). Never written into either of the other two.
+    minutes_read = models.PositiveIntegerField(null=True, blank=True)
     updated_on = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -242,6 +309,7 @@ class Progress(models.Model):
         # so this and `Book.measure` agree about a chapter count of zero.
         ordering = [
             models.Case(
+                models.When(book__total_minutes__gt=0, then=models.F("minutes_read")),
                 models.When(
                     book__total_chapters__gt=0, then=models.F("chapters_read")
                 ),
@@ -264,7 +332,7 @@ class Progress(models.Model):
             return f"{self.member} — nothing recorded on {self.book.title}"
 
         return (
-            f"{self.member} — {self.units_read} {self.book.measure} "
+            f"{self.member} — {self.book.describe_units(self.units_read)} "
             f"of {self.book.title}"
         )
 
@@ -277,11 +345,7 @@ class Progress(models.Model):
         there; it simply stops being the answer to "how far", and this answers
         ``None`` — nothing recorded — until the member says so in chapters.
         """
-        return (
-            self.chapters_read
-            if self.book.measure == "chapters"
-            else self.pages_read
-        )
+        return getattr(self, self.book.unit_column)
 
     @property
     def percent(self):
@@ -320,9 +384,7 @@ class Progress(models.Model):
 
         Returns the appended entry, or ``None`` when nothing moved.
         """
-        column = (
-            "chapters_read" if self.book.measure == "chapters" else "pages_read"
-        )
+        column = self.book.unit_column
         units_read = getattr(self, column)
 
         with transaction.atomic():
@@ -377,6 +439,7 @@ class ProgressEntry(models.Model):
     # constraint below is what makes "nothing at all" unambiguous.
     pages_read = models.PositiveIntegerField(null=True, blank=True)
     chapters_read = models.PositiveIntegerField(null=True, blank=True)
+    minutes_read = models.PositiveIntegerField(null=True, blank=True)
 
     recorded_on = models.DateTimeField(auto_now_add=True)
 
@@ -389,13 +452,26 @@ class ProgressEntry(models.Model):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    models.Q(pages_read__isnull=False, chapters_read__isnull=True)
-                    | models.Q(pages_read__isnull=True, chapters_read__isnull=False)
+                    models.Q(
+                        pages_read__isnull=False,
+                        chapters_read__isnull=True,
+                        minutes_read__isnull=True,
+                    )
+                    | models.Q(
+                        pages_read__isnull=True,
+                        chapters_read__isnull=False,
+                        minutes_read__isnull=True,
+                    )
+                    | models.Q(
+                        pages_read__isnull=True,
+                        chapters_read__isnull=True,
+                        minutes_read__isnull=False,
+                    )
                 ),
                 name="entry_counts_one_measure",
                 violation_error_message=(
-                    "An entry records pages or chapters — one of the two, "
-                    "never both and never neither."
+                    "An entry records pages, chapters or minutes - exactly "
+                    "one of the three, never two and never none."
                 ),
             )
         ]
@@ -403,6 +479,11 @@ class ProgressEntry(models.Model):
     def __str__(self):
         if self.pages_read is not None:
             return f"{self.pages_read} pages on {self.recorded_on:%Y-%m-%d}"
+
+        if self.minutes_read is not None:
+            return (
+                f"{format_minutes(self.minutes_read)} on {self.recorded_on:%Y-%m-%d}"
+            )
 
         return f"{self.chapters_read} chapters on {self.recorded_on:%Y-%m-%d}"
 
@@ -416,11 +497,7 @@ class ProgressEntry(models.Model):
         changed measure — it is still a true thing somebody typed, it is simply
         not on this trail.
         """
-        return (
-            self.chapters_read
-            if self.progress.book.measure == "chapters"
-            else self.pages_read
-        )
+        return getattr(self, self.progress.book.unit_column)
 
     @property
     def percent(self):
