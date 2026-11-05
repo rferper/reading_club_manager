@@ -43,6 +43,13 @@
           </p>
 
           <p class="byline">{{ row.entry.recorded_on }}</p>
+
+          {% if row.may_remove %}
+            <form method="post" action="{% url 'club:progress_entry_delete' book.pk member.pk row.entry.pk %}">
+              {% csrf_token %}
+              <button type="submit">Remove</button>
+            </form>
+          {% endif %}
         </li>
       {% endfor %}
     </ol>

@@ -37,4 +37,9 @@ urlpatterns = [
         views.progress_trail,
         name="progress_trail",
     ),
+    path(
+        "books/<int:pk>/progress/<int:member_pk>/entries/<int:entry_pk>/delete/",
+        views.progress_entry_delete,
+        name="progress_entry_delete",
+    ),
 ]

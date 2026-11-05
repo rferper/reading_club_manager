@@ -17,6 +17,7 @@ is a new module and nothing else. What is there now:
 | `test_books.py` | the `Book` model and the current-read flag |
 | `test_duration.py` | the listening-time parser, formatter and form field |
 | `test_progress.py` | the `Progress` model, its derived percentage, the update form |
+| `test_progress_trail.py` | one member's trail through a book, and removing an older entry from it |
 | `test_progress_overview.py` | the group table, its ordering, its query count |
 | `test_notes.py` | the `Note` model, the notes page, who may remove one |
 | `test_questions.py` | the `Question` model, its order, the admin-only controls |

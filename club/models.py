@@ -419,15 +419,17 @@ class Progress(models.Model):
 class ProgressEntry(models.Model):
     """One number a member recorded against one book, and when.
 
-    Append-only, and beside `Progress` rather than instead of it (decision
+    Appended only by `Progress.record()`, and beside `Progress` rather than instead of it (decision
     #26). `Progress` keeps its unique row per member per book and keeps meaning
     "where this member is now"; this is every value that row has ever held, so
     the club can read a member's trail through a book instead of only its end.
 
-    Nothing edits or deletes an entry. A typo recorded here is permanent, and an
-    admin correcting a `Progress` row straight in `/admin/` moves the current
-    value without leaving a dot on the trail. That is the named cost of keeping
-    the two models apart, and #31 is where it gets paid off.
+    Nothing edits an entry. The one thing that deletes one is the owner removing
+    an older entry from their own trail on the current book
+    (`progress_entry_delete`, decision #40); the newest entry is never
+    removable, so the current value and the newest entry cannot disagree. An
+    admin correcting a `Progress` row straight in `/admin/` still moves the
+    current value without leaving a dot on the trail (#51).
 
     Two columns rather than one reused, for decision #25's reason exactly: a
     number recorded on one scale must never become readable against another.

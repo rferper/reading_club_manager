@@ -1159,3 +1159,24 @@ was typed, so such a row keeps it, and so does a page-only row at 0. The reverse
 **Not done here.** Converting a recorded number between units is #49. The pointer to
 #21 in decision #25 is stale: #21 is "Reopen a finished book". That text is left as
 it was written.
+
+
+## 40. An owner may remove an older progress entry; the newest is never removable
+
+Settled while building #31. It amends decision #26, whose "append-only" now means
+"appended only by `Progress.record()`, and removable if it is not the newest".
+
+**The rule.** A member removes an entry from their own trail by POST to
+`progress_entry_delete`. Only the owner: the admin flag does not change that (whether an
+admin may remove another member's entry is #50). Only on the current book; a finished
+book's trail is read-only. Never the newest entry of the row, whatever its unit, so the
+current value on `Progress` and the newest entry cannot disagree. Removing an entry
+leaves `Progress` untouched.
+
+**Typo fix.** Save the correct number on the update form, which appends a new newest
+entry, then remove the older wrong one. Whether `Progress` should move back when the
+newest is removed is #51.
+
+**No confirmation page.** The button is a POST form with CSRF that redirects back to the
+trail with a message, like removing a note. Refusals that are a missing step (finished
+book, newest entry) redirect with a message; acting on someone else's trail is a 403.

@@ -45,6 +45,7 @@ from .models import (
     MemberRating,
     Note,
     Progress,
+    ProgressEntry,
     Question,
 )
 
@@ -465,9 +466,18 @@ def progress_trail(request, pk, member_pk):
     recorded_in_other_unit = 0
     other_measure = ""
 
+    viewer = current_member(request)
+    # Only the owner, only on the current read (#31). The buttons are
+    # cosmetic: `progress_entry_delete` asks the same question again.
+    owner_may_remove = book.is_current and viewer is not None and viewer.pk == member.pk
+    newest_pk = None
+
     if progress is not None:
         column = book.unit_column
         entries = list(progress.entries.select_related("progress__book"))
+        # The newest entry of the whole row, whatever its unit, is the one the
+        # current value agrees with (decision #26) and is never removable.
+        newest_pk = entries[0].pk if entries else None
         on_this_scale = [
             entry for entry in entries if getattr(entry, column) is not None
         ]
@@ -507,6 +517,7 @@ def progress_trail(request, pk, member_pk):
                     "entry": entry,
                     "change": change,
                     "percent_change": percent_change,
+                    "may_remove": owner_may_remove and entry.pk != newest_pk,
                 }
             )
 
@@ -674,6 +685,48 @@ def _post_reply(request, book):
 
     messages.success(request, "Reply posted.")
     return redirect("club:notes")
+
+
+@require_POST
+@require_member
+def progress_entry_delete(request, pk, member_pk, entry_pk):
+    """Remove an older entry from your own trail on the current book (#31).
+
+    Owner only, and the admin flag does not change that. The newest entry is
+    refused so the current value and the newest entry cannot disagree: fixing
+    a typo is saving the right number, then removing the older wrong one.
+    `Progress` itself is never touched. A refusal that is a missing step (a
+    finished book, the newest entry) redirects with a message; acting on
+    somebody else's trail is a 403.
+    """
+    book = get_object_or_404(Book, pk=pk)
+    member = get_object_or_404(Member, pk=member_pk)
+    entry = get_object_or_404(
+        ProgressEntry, pk=entry_pk, progress__book=book, progress__member=member
+    )
+
+    if current_member(request).pk != member.pk:
+        raise PermissionDenied("An entry is removed by the member whose trail it is on.")
+
+    trail = redirect("club:progress_trail", book.pk, member.pk)
+
+    if not book.is_current:
+        messages.error(
+            request, "This book is no longer being read, so its trail can't be changed."
+        )
+        return trail
+
+    if entry.pk == entry.progress.entries.values_list("pk", flat=True).first():
+        messages.error(
+            request,
+            "The newest entry can't be removed. Save the correct number first, "
+            "then remove the older one.",
+        )
+        return trail
+
+    entry.delete()
+    messages.success(request, "Entry removed.")
+    return trail
 
 
 @require_POST
