@@ -1324,3 +1324,26 @@ admin removal.
 
 **Not done.** No soft delete, undo or audit trail, and no type-the-title friction. The link is on
 `/` and `/history/<pk>/` only, not on the `/history/` list. File an issue if the club ever wants undo.
+
+## 46. New notes and note replies join the "Since you last looked" panel
+
+**Issue:** #40. **Amends:** 43 (the line "Replies are not in the home page's panel (#40)").
+
+**What counts.** On the current book only, other members' top-level notes (`parent` null) and
+note replies (`parent` set, decision 28), each compared on `created_on` strictly after the
+decision 31 marker (`notifications_seen_at`, or the start of `joined_on` when null). Notes and
+replies are counted separately and render as two list items, "N new note(s)" then "N new
+reply/replies", each linking to the notes page, after new book, questions and answers. The
+viewer's own are never counted; another member's reply under the viewer's note is. A
+deactivated author still counts (3). Reactions (42) and chapter anchors (35) do not change
+anything. Notes are immutable (7), so `created_on` is the only timestamp. The panel shows when
+any item exists, and Mark as seen is unchanged.
+
+**One query.** Both counts come from a single `aggregate` on `Note` with two filtered `Count`s
+(`parent__isnull=True` and `parent__isnull=False`), so the home page gains exactly one query
+whatever the number of notes. Pinned in `test_whats_new.py` (5 queries before, 6 after). No
+migration.
+
+**Amendment to 43.** Decision 43 says replies are not in the panel (#40). That is true only of
+replies to answers (`AnswerReply`): #40 took "replies" to mean note replies. Replies to answers
+stay out of the panel and are tracked in #60.
