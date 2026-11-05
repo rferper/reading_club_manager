@@ -28,7 +28,7 @@ route that is not here.
 | `/who-are-you/` | `identify` | GET, POST | Public | Pick your name; stores it in the session | #6 | Built |
 | `/who-are-you/forget/` | `forget_me` | POST | Public | Clear the session identity | #6 | Built |
 | `/seen/` | `mark_seen` | POST | Public | Stamp the viewer's `notifications_seen_at` with now so the home page's "Since you last looked" panel clears, then redirect to `/`. GET is 405. With nobody identified it changes nothing and still redirects. No other route ever writes the marker | #22 | Built |
-| `/admin-pin/` | `admin_pin` | GET, POST | Public | Enter the PIN; sets the admin session flag | #4 | Built |
+| `/admin-pin/` | `admin_pin` | GET, POST | Public | Enter the PIN; sets the admin session flag and rotates the session key. Admin mode expires on idle or max age (decision #33) | #4 | Built |
 | `/admin-pin/exit/` | `admin_exit` | POST | Admin | Leave admin mode | #4 | Built |
 | `/members/` | `member_list` | GET | Public | The roster, with roles and active state | #5 | Built |
 | `/members/add/` | `member_add` | GET, POST | Admin | Add a member | #5 | Built |

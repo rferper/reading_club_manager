@@ -9,6 +9,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from .helpers import enter_admin
 from ..forms import BookEditForm, BookForm
 from ..models import Answer, Book, Member, MemberRating, Note, Progress, Question
 
@@ -385,7 +386,7 @@ class BookReopenTests(TestCase):
 
     def admin(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
     def counts(self):

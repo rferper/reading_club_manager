@@ -5,7 +5,7 @@ from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect
 from django.urls import reverse
 
-from .identity import current_member
+from .identity import current_member, is_admin
 
 
 def _refuse(request, gate_url_name, reason):
@@ -37,7 +37,7 @@ def club_admin_required(view_func):
 
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
-        if request.session.get("is_club_admin"):
+        if is_admin(request):
             return view_func(request, *args, **kwargs)
 
         return _refuse(

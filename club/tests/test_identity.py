@@ -9,6 +9,7 @@ from django.template.loader import render_to_string
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
+from .helpers import enter_admin
 from ..decorators import require_member
 from ..models import Member
 
@@ -309,7 +310,7 @@ class IdentityIsSeparateFromAdminTests(TestCase):
 
     def test_admin_mode_does_not_identify_anyone(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
         response = self.client.get(reverse("club:home"))
@@ -318,7 +319,7 @@ class IdentityIsSeparateFromAdminTests(TestCase):
 
     def test_leaving_admin_mode_leaves_the_identity_alone(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session["member_id"] = self.ada.pk
         session.save()
 
@@ -328,7 +329,7 @@ class IdentityIsSeparateFromAdminTests(TestCase):
 
     def test_being_forgotten_leaves_admin_mode_alone(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session["member_id"] = self.ada.pk
         session.save()
 

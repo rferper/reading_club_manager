@@ -8,6 +8,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
+from .helpers import enter_admin
 from ..models import Answer, Book, Member, Note, Progress, Question
 
 
@@ -40,7 +41,7 @@ class FinishBookTests(TestCase):
 
     def setUp(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
         self.url = reverse("club:book_finish", args=[self.book.pk])
 
@@ -254,7 +255,7 @@ class StartBookTests(TestCase):
 
     def setUp(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
     def test_an_admin_can_start_a_book(self):
@@ -419,7 +420,7 @@ class HistoryListTests(TestCase):
 
     def test_an_admin_sees_them(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
         response = self.client.get(reverse("club:history"))
@@ -558,7 +559,7 @@ class BookEditTests(TestCase):
 
     def setUp(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
         self.url = reverse("club:book_edit", args=[self.book.pk])
 
@@ -666,7 +667,7 @@ class FullCycleTests(TestCase):
     def setUp(self):
         self.ada = Member.objects.create(name="Ada")
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session["member_id"] = self.ada.pk
         session.save()
 
@@ -797,7 +798,7 @@ class HistoryMixesMeasuresTests(TestCase):
 
     def test_starting_a_book_in_chapters_goes_through_the_same_form(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
         self.client.post(
@@ -817,7 +818,7 @@ class HistoryMixesMeasuresTests(TestCase):
 
     def test_starting_a_book_with_both_counts_is_refused_on_the_page(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
         response = self.client.post(
@@ -984,7 +985,7 @@ class HistorySearchTests(TestCase):
     def test_results_keep_ratings_and_the_admin_edit_link(self):
         Book.objects.filter(pk=self.animal.pk).update(rating=4)
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
         response = self.search("animal")

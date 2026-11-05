@@ -6,6 +6,7 @@ from django.db.models import ProtectedError
 from django.test import TestCase
 from django.urls import reverse
 
+from .helpers import enter_admin
 from ..models import Book, Member, Note
 
 
@@ -329,7 +330,7 @@ class NoteDeleteTests(TestCase):
 
     def test_an_admin_can_remove_anybody_s_note(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
         self.client.post(self.url)

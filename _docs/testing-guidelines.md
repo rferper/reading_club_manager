@@ -74,9 +74,13 @@ effort where the app is actually easy to get wrong:
 
       session = self.client.session
       session["member_id"] = self.ada.pk
-      session["is_club_admin"] = True
+      enter_admin(session)  # from .helpers; sets the flag and its timestamps
       session.save()
 
+- Admin mode now expires (decision #33), so a bare `session["is_club_admin"] = True`
+  counts as expired. Use `enter_admin(session)` from `club/tests/helpers.py`. To
+  test expiry, patch `django.utils.timezone.now` with `mock.patch` rather than
+  sleeping, and use distinct offsets so a coarse Windows clock tick cannot tie.
 - Name the test after the rule it protects —
   `test_second_current_book_is_rejected` — so a failure report names the broken
   rule instead of a line number.

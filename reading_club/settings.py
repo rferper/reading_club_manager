@@ -36,6 +36,15 @@ ALLOWED_HOSTS = []
 # closed: admin mode becomes unreachable.
 CLUB_ADMIN_PIN = os.environ.get("CLUB_ADMIN_PIN", "0000").strip()
 
+# Admin mode lapses after this many seconds without a request in admin mode.
+# Decision #5 still holds: this is hygiene (a forgotten admin tab), not
+# security. Plain settings, not environment variables. See decision #33.
+CLUB_ADMIN_IDLE_SECONDS = 1800
+
+# ...and after this many seconds in total, however active. Same caveat as above
+# (decision #5).
+CLUB_ADMIN_MAX_SECONDS = 28800
+
 
 # Application definition
 
