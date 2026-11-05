@@ -24,7 +24,7 @@ route that is not here.
 
 | Path | Name | Methods | Access | Purpose | Issue | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| `/` | `home` | GET | Public | Current book, author, dates; links out to everything else; for an identified member, a "Since you last looked" panel of new questions, other members' new answers and a newly started book (decision #31), and other members' new notes and note replies as counts linking to the notes page (decision #46) | #1, #8, #40 | Built |
+| `/` | `home` | GET | Public | Current book, author, dates; links out to everything else; for an identified member, a "Since you last looked" panel of new questions, other members' new answers and a newly started book (decision #31), and other members' new notes and note replies as counts linking to the notes page (decision #46), and other members' new answer replies as a count linking to the questions page (decision #48) | #1, #8, #40, #60 | Built |
 | `/who-are-you/` | `identify` | GET, POST | Public | Pick your name; stores it in the session | #6 | Built |
 | `/who-are-you/forget/` | `forget_me` | POST | Public | Clear the session identity | #6 | Built |
 | `/seen/` | `mark_seen` | POST | Public | Stamp the viewer's `notifications_seen_at` with now so the home page's "Since you last looked" panel clears, then redirect to `/`. GET is 405. With nobody identified it changes nothing and still redirects. No other route ever writes the marker | #22 | Built |
