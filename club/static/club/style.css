@@ -401,6 +401,17 @@ button {
   color: var(--warn);
 }
 
+/* The Agree control and its count sit together on the byline line. */
+.note__agree {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.note__agree form {
+  display: inline;
+}
+
 /* A note's own paragraphs, which `linebreaks` wraps in <p>. */
 .note p:first-child {
   margin-top: 0;

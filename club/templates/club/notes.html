@@ -48,6 +48,16 @@
         <div class="byline note__byline">
           <span>{{ row.note.author.name }} · {{ row.note.created_on }}{% if row.note.chapter %} · <a href="{% url 'club:notes' %}?chapter={{ row.note.chapter }}">Chapter {{ row.note.chapter }}</a>{% endif %}</span>
 
+          <span class="note__agree">
+            {% if current_member %}
+              <form method="post" action="{% url 'club:note_react' row.note.pk %}">
+                {% csrf_token %}
+                <button type="submit">{% if row.agreed %}Undo agree{% else %}Agree{% endif %}</button>
+              </form>
+            {% endif %}
+            Agree ({{ row.agree_count }})
+          </span>
+
           {% if row.may_remove %}
             <form method="post" action="{% url 'club:note_delete' row.note.pk %}">
               {% csrf_token %}

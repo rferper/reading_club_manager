@@ -234,9 +234,9 @@ class ReactionQueryTests(ReactionBase):
     def test_the_count_is_pinned(self):
         self.identify(self.bob)
         self._make_notes(2)
-        # Pinned to the measured figure; the base page plus one query for the
-        # viewer's own reacted note ids.
-        with self.assertNumQueries(PINNED_QUERIES):
+        # Six before reactions existed (book twice, session, member, notes,
+        # replies prefetch) plus one for the viewer's reacted note ids.
+        with self.assertNumQueries(7):
             self.client.get(reverse("club:notes"))
 
     def test_the_order_is_still_newest_first(self):
@@ -244,6 +244,3 @@ class ReactionQueryTests(ReactionBase):
         Reaction.objects.create(note=self.note, member=self.bob)
         content = self.client.get(reverse("club:notes")).content.decode()
         self.assertLess(content.index("Newer one"), content.index("Lovely"))
-
-
-PINNED_QUERIES = 0  # replaced after measuring; see the implementation commit
