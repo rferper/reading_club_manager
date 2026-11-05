@@ -7,9 +7,10 @@ from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from ..forms import BookEditForm, BookForm
-from ..models import Book
+from ..models import Answer, Book, Member, MemberRating, Note, Progress, Question
 
 
 class BookModelTests(TestCase):
@@ -356,3 +357,140 @@ class BookAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Another book is already the club&#x27;s current read.")
         self.assertEqual(Book.objects.filter(is_current=True).count(), 1)
+
+
+class BookReopenTests(TestCase):
+    """Admin-only inverse of finish: #21, decisions #2 and #30."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.book = Book.objects.create(
+            title="Middlemarch",
+            author="George Eliot",
+            total_pages=880,
+            started_on=date(2025, 6, 1),
+            finished_on=date(2025, 9, 1),
+            rating=4,
+            is_current=False,
+        )
+        Progress.objects.create(book=cls.book, member=cls.ada, pages_read=880)
+        Note.objects.create(book=cls.book, author=cls.ada, body="Dorothea.")
+        question = Question.objects.create(book=cls.book, text="Why?", position=1)
+        Answer.objects.create(question=question, member=cls.ada, body="Because.")
+        MemberRating.objects.create(book=cls.book, member=cls.ada, score=5)
+
+    def setUp(self):
+        self.url = reverse("club:book_reopen", args=[self.book.pk])
+
+    def admin(self):
+        session = self.client.session
+        session["is_club_admin"] = True
+        session.save()
+
+    def counts(self):
+        return (
+            Progress.objects.count(),
+            Note.objects.count(),
+            Question.objects.count(),
+            Answer.objects.count(),
+            MemberRating.objects.count(),
+        )
+
+    def test_get_confirms_and_changes_nothing(self):
+        self.admin()
+        response = self.client.get(self.url)
+
+        self.assertContains(response, "Middlemarch")
+        self.book.refresh_from_db()
+        self.assertFalse(self.book.is_current)
+        self.assertEqual(self.book.finished_on, date(2025, 9, 1))
+
+    def test_post_reopens_and_keeps_everything(self):
+        self.admin()
+        before = self.counts()
+        response = self.client.post(self.url)
+
+        self.assertRedirects(response, reverse("club:home"))
+        self.book.refresh_from_db()
+        self.assertTrue(self.book.is_current)
+        self.assertIsNone(self.book.finished_on)
+        self.assertEqual(self.book.started_on, date(2025, 6, 1))
+        self.assertEqual(self.book.rating, 4)
+        self.assertEqual(self.counts(), before)
+        self.assertEqual(MemberRating.objects.get().score, 5)
+        self.assertEqual(Book.objects.current(), self.book)
+
+    def test_message_shows_and_book_leaves_history_but_detail_opens(self):
+        self.admin()
+        response = self.client.post(self.url, follow=True)
+        self.assertContains(response, "current read again")
+
+        history = self.client.get(reverse("club:history"))
+        self.assertNotIn(self.book, list(history.context["books"]))
+        detail = self.client.get(reverse("club:history_detail", args=[self.book.pk]))
+        self.assertEqual(detail.status_code, 200)
+
+    def test_non_admin_post_is_403_and_book_stays_finished(self):
+        response = self.client.post(self.url)
+
+        self.assertEqual(response.status_code, 403)
+        self.book.refresh_from_db()
+        self.assertFalse(self.book.is_current)
+        self.assertEqual(self.book.finished_on, date(2025, 9, 1))
+
+    def test_non_admin_get_redirects_to_the_pin_gate(self):
+        response = self.client.get(self.url)
+
+        self.assertRedirects(
+            response,
+            f"{reverse('club:admin_pin')}?next={self.url}",
+            fetch_redirect_response=False,
+        )
+
+    def test_reopening_while_another_book_is_current_changes_nothing(self):
+        self.admin()
+        other = Book.objects.create(title="Piranesi", author="Clarke", is_current=True)
+        before = self.counts()
+
+        page = self.client.get(self.url)
+        self.assertContains(page, "Piranesi")
+
+        response = self.client.post(self.url, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Finish it before")
+        self.book.refresh_from_db()
+        self.assertFalse(self.book.is_current)
+        self.assertEqual(self.book.finished_on, date(2025, 9, 1))
+        self.assertEqual(Book.objects.current(), other)
+        self.assertEqual(self.counts(), before)
+
+    def test_current_or_unknown_book_is_404(self):
+        self.admin()
+        current = Book.objects.create(title="Piranesi", author="C", is_current=True)
+
+        for pk in (current.pk, 99999):
+            url = reverse("club:book_reopen", args=[pk])
+            self.assertEqual(self.client.get(url).status_code, 404)
+            self.assertEqual(self.client.post(url).status_code, 404)
+
+    def test_reopen_link_on_detail_page_is_admin_only(self):
+        detail = reverse("club:history_detail", args=[self.book.pk])
+
+        self.assertNotContains(self.client.get(detail), self.url)
+        self.admin()
+        self.assertContains(self.client.get(detail), self.url)
+
+    def test_reopen_then_finish_again_defaults_the_date_to_today(self):
+        self.admin()
+        self.client.post(self.url)
+        finish = reverse("club:book_finish", args=[self.book.pk])
+
+        form = self.client.get(finish).context["form"]
+        self.assertEqual(form.initial["finished_on"], timezone.localdate())
+
+        self.client.post(finish, {"finished_on": "2025-12-01", "rating": "5"})
+        self.book.refresh_from_db()
+        self.assertFalse(self.book.is_current)
+        self.assertEqual(self.book.finished_on, date(2025, 12, 1))
