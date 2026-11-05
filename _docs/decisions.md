@@ -772,3 +772,37 @@ Five smaller calls that come with it:
 
 The route this adds, `/books/<pk>/progress/<member_pk>/`, is public like every
 other read in this app, and is in `_docs/api.md`.
+
+## 27. The trail shows one scale, counts the other, and names its changes in text
+
+Settled while building the trail page (#18). Calls the issue's criteria left to
+the implementer.
+
+**Only entries recorded in the unit the book is measured in now are on the
+trail; the rest are counted out loud.** A book that moved from pages to chapters
+shows "N earlier entries were recorded in pages ... not on this trail" rather
+than a blank page or a page count read against a chapter total.
+
+Why: decision #25 — a number recorded on one scale is never readable against
+another. Hiding them silently would make the page look like the member recorded
+nothing, which decision #19 says is a different sentence. The entries stay in
+the database untouched.
+
+**The first entry on a trail has no change figure, and a change never crosses
+the filter above.** The oldest visible entry is compared with nothing, so a
+chapter entry is never "+6 chapters" over a page entry.
+
+**Changes are text, signed, and a decrease keeps its minus** ("-173 pages,
+-20%"). No colour or arrow carries the meaning. When the book has no
+denominator the page change is still named but no percentage change is invented.
+
+**A trail with one entry says there is nothing to compare it to yet** (one point
+draws no line, decision #26). A member with no `Progress` row at all gets "has
+not recorded anything", never a bar at zero.
+
+**Four queries whatever the trail's length** — book, member, row, entries with
+`progress__book` joined in — pinned by `assertNumQueries`, because
+`units_read` and `percent` on each entry would otherwise ask the book per dot.
+
+**The overview links only active members; the archive links every row,** the
+deactivated member's included (decision #3).
