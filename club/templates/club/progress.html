@@ -27,6 +27,7 @@
           <th scope="col">Member</th>
           <th scope="col">Read</th>
           <th scope="col">How far</th>
+          <th scope="col">This week</th>
         </tr>
       </thead>
       <tbody>
@@ -67,6 +68,19 @@
                 {{ row.percent }}%
               {% else %}
                 <span class="empty">no page or chapter count recorded</span>
+              {% endif %}
+            </td>
+
+            <td>
+              {% comment %}
+                Words, never colour or an arrow, carry the direction
+                (decision #27). Nothing recorded in this unit: a dash, not a
+                zero.
+              {% endcomment %}
+              {% if row.movement %}
+                {{ row.movement.text }}
+              {% else %}
+                <span class="empty">&mdash;</span>
               {% endif %}
             </td>
           </tr>

@@ -571,7 +571,7 @@ class ProgressOverviewNotStartedCellTests(TestCase):
                     ["Ada", "Bob", "Cleo"],
                 )
 
-                cleo_count, cleo_pct = self._cells(response, "Cleo")
+                cleo_count, cleo_pct, _movement = self._cells(response, "Cleo")
                 self.assertIn("not started", cleo_count)
                 self.assertNotIn("0%", cleo_pct)
                 self.assertNotIn("progress__fill", cleo_pct)
@@ -579,12 +579,12 @@ class ProgressOverviewNotStartedCellTests(TestCase):
                 self.assertTrue(cleo_pct.strip())
                 self.assertIn('class="empty"', cleo_pct)
 
-                bob_count, bob_pct = self._cells(response, "Bob")
+                bob_count, bob_pct, _movement = self._cells(response, "Bob")
                 self.assertIn(zero_text, bob_count)
                 self.assertIn("0%", bob_pct)
                 self.assertIn("width: 0%", bob_pct)
 
-                ada_count, ada_pct = self._cells(response, "Ada")
+                ada_count, ada_pct, _movement = self._cells(response, "Ada")
                 self.assertIn("50%", ada_pct)
                 self.assertIn('aria-hidden="true"', ada_pct)
 
