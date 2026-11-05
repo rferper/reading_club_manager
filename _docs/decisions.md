@@ -931,3 +931,21 @@ The dev seed sets it explicitly, since a raw fixture load skips `auto_now_add`.
 rather than 403, because the caller wanted the panel gone and there is nothing to stamp.
 An empty panel is not rendered at all; a deactivated member is unidentified (decision #3)
 and sees none.
+
+## 32. CI runs the same two commands as the local workflow, on Django's runner
+
+`.github/workflows/ci.yml` runs `uv sync --locked`, `manage.py check` and
+`manage.py test` on push to `master` and on every pull request, with the Python
+version read from `.python-version`. These are the commands in AGENTS.md, with
+nothing added: no `migrate`, `loaddata` or `runserver`, no secrets, no
+`db.sqlite3` (the runner builds a temporary test database). `--locked` makes a
+stale `uv.lock` fail the job instead of being quietly rewritten.
+
+Decision #12's "no CI yet" reason no longer holds, but its other reasons do: the
+suite's assertions are `TestCase` methods, `parametrize` is not needed, and
+pytest would still cost two dependencies and a second idiom. So pytest is still
+not added, and neither is any test-reporting dependency. Revisit only if
+reporting is actually wanted, as #12 already says.
+
+Out of scope here and unchanged: deployment hardening (#42), coverage, linting,
+matrix builds and branch protection.
