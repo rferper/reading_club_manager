@@ -949,3 +949,35 @@ reporting is actually wanted, as #12 already says.
 
 Out of scope here and unchanged: deployment hardening (#42), coverage, linting,
 matrix builds and branch protection.
+
+## 33. Admin mode expires on idle and on total age, and the PIN rotates the session key
+
+Settled while building #24. Decision #5 still holds: this is hygiene, so a forgotten
+admin tab does not stay open for the two-week session cookie. It is not security, and
+the PIN is still not a permission boundary.
+
+**Two plain settings, not environment variables.** `CLUB_ADMIN_IDLE_SECONDS` (default
+1800) and `CLUB_ADMIN_MAX_SECONDS` (default 28800), in `reading_club/settings.py`.
+
+**Three session keys.** `is_club_admin` (the flag, unchanged), `club_admin_started_at`
+and `club_admin_last_used_at` (epoch seconds from `timezone.now()`), set together by a
+correct PIN. One helper, `club.identity.is_admin(request)`, is the only code that reads
+the raw flag: `club_admin_required`, the `is_club_admin` context processor and the two
+views that used to read it all call it. It returns False and removes all three keys when
+idle time or total time exceeds its limit, and otherwise moves `club_admin_last_used_at`
+forward, so even a GET that only shows admin links keeps the window open.
+
+**A flag without timestamps is expired.** A session written before this change, or by
+a test, does not stay admin forever; the next check clears it. Tests set admin mode with
+`enter_admin(session)` from `club/tests/helpers.py`, which writes all three keys.
+
+**Expiry is silent and touches only admin mode.** The refusals are the existing ones
+(decision #14): a GET redirects to `/admin-pin/?next=...`, a POST is a 403. No message is
+added. `member_id` is never touched, so the viewer is still identified. `POST
+/admin-pin/exit/` removes the flag and both timestamps.
+
+**A correct PIN calls `session.cycle_key()`** before the flag is set; a wrong PIN does
+not. `member_id` survives the rotation.
+
+Still out: rate limiting after wrong PINs (#45), changing the PIN from the UI (#46), and
+any expiry warning or countdown.
