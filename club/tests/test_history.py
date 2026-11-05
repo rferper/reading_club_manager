@@ -1035,3 +1035,46 @@ class HistorySearchQueryCountTests(TestCase):
 
         with self.assertNumQueries(1):
             self.client.get(reverse("club:history"), {"q": "orwell"})
+
+
+class ArchiveInMinutesTests(TestCase):
+    """An audiobook in the archive reads in time, in the right order."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.book = Book.objects.create(
+            title="Piranesi",
+            author="Susanna Clarke",
+            total_minutes=750,
+            finished_on=date(2025, 12, 1),
+        )
+        for name, minutes in (("Ada", 100), ("Bo", 600)):
+            member = Member.objects.create(name=name)
+            Progress.objects.create(book=cls.book, member=member, minutes_read=minutes)
+        Progress.objects.create(
+            book=cls.book, member=Member.objects.create(name="Cy"), pages_read=300
+        )
+
+    def test_history_detail_shows_progress_and_total_as_time(self):
+        response = self.client.get(reverse("club:history_detail", args=[self.book.pk]))
+
+        self.assertContains(response, "10h, 80%")
+        self.assertContains(response, "1h 40m, 13%")
+        self.assertContains(response, "12h 30m")
+        self.assertContains(response, "not started")
+        self.assertNotContains(response, "750")
+        self.assertNotContains(response, "600")
+
+    def test_history_detail_orders_by_minutes_with_legacy_rows_last(self):
+        response = self.client.get(reverse("club:history_detail", args=[self.book.pk]))
+
+        self.assertEqual(
+            [row.member.name for row in response.context["progress"]],
+            ["Bo", "Ada", "Cy"],
+        )
+
+    def test_the_archive_list_shows_the_total_as_time(self):
+        response = self.client.get(reverse("club:history"))
+
+        self.assertContains(response, "12h 30m")
+        self.assertNotContains(response, "750")

@@ -1,4 +1,5 @@
 {% extends "club/base.html" %}
+{% load club_units %}
 
 {% block title %}{{ member.name }} on {{ book.title }} — Reading Club Manager{% endblock %}
 
@@ -6,7 +7,7 @@
   <h1>{{ member.name }} on {{ book.title }}</h1>
 
   <p class="byline">
-    by {{ book.author }}{% if book.total_units %} · {{ book.total_units }} {{ book.measure }}{% endif %}
+    by {{ book.author }}{% if book.total_units %} · {{ book.total_units|counted:book }}{% endif %}
     {% if not member.is_active %}· no longer on the roster{% endif %}
   </p>
 
@@ -26,9 +27,9 @@
       {% for row in rows %}
         <li class="panel trail__entry">
           <p class="trail__count">
-            {{ row.entry.units_read }}{% if book.total_units %} of {{ book.total_units }}{% endif %} {{ book.measure }}
+            {{ row.entry.units_read|counted_of_total:book }}
             {% if row.change is not None %}
-              <span class="trail__change">{% if row.change > 0 %}+{{ row.change }} {{ book.measure }}{% elif row.change < 0 %}{{ row.change }} {{ book.measure }}{% else %}no change{% endif %}{% if row.percent_change is not None %}, {% if row.percent_change > 0 %}+{% endif %}{{ row.percent_change }}%{% endif %}</span>
+              <span class="trail__change">{% if row.change != 0 %}{{ row.change|signed:book }}{% else %}no change{% endif %}{% if row.percent_change is not None %}, {% if row.percent_change > 0 %}+{% endif %}{{ row.percent_change }}%{% endif %}</span>
             {% endif %}
           </p>
 
@@ -59,7 +60,7 @@
     {% endcomment %}
     <p class="empty">
       {% if recorded_in_other_unit == 1 %}One earlier entry was{% else %}{{ recorded_in_other_unit }} earlier entries were{% endif %}
-      recorded in {{ other_measure }}, before this book was measured in {{ book.measure }},
+      recorded in {{ other_measure }}, before this book was measured in {{ measure_label }},
       so {% if recorded_in_other_unit == 1 %}it is{% else %}they are{% endif %} not on this trail.
     </p>
   {% endif %}

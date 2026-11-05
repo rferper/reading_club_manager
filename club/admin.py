@@ -1,6 +1,8 @@
+from django import forms
 from django.contrib import admin
 
-from .models import Book, Member
+from .duration import MinutesField, format_minutes
+from .models import Book, Member, Progress
 
 
 @admin.register(Member)
@@ -25,6 +27,28 @@ class MemberAdmin(admin.ModelAdmin):
         return actions
 
 
+class BookAdminForm(forms.ModelForm):
+    """Edits a book's listening time as "12h 30m", like the app's own form."""
+
+    total_minutes = MinutesField(
+        label="Total listening time", required=False, allow_zero=False
+    )
+
+    class Meta:
+        model = Book
+        fields = "__all__"
+
+
+class ProgressAdminForm(forms.ModelForm):
+    """Edits time listened as "4h 12m"; the stored value stays whole minutes."""
+
+    minutes_read = MinutesField(label="Minutes read", required=False)
+
+    class Meta:
+        model = Progress
+        fields = "__all__"
+
+
 @admin.register(Book)
 class BookAdmin(admin.ModelAdmin):
     """Books can be added here until #14 builds the start and finish flows.
@@ -33,6 +57,7 @@ class BookAdmin(admin.ModelAdmin):
     and lose the explicit null placement on the two nullable dates.
     """
 
+    form = BookAdminForm
     list_display = (
         "title",
         "author",
@@ -42,6 +67,33 @@ class BookAdmin(admin.ModelAdmin):
         "rating",
         "total_pages",
         "total_chapters",
+        "listening_time",
     )
     list_filter = ("is_current",)
     search_fields = ("title", "author")
+
+    @admin.display(description="Total listening time", ordering="total_minutes")
+    def listening_time(self, obj):
+        if obj.total_minutes is None:
+            return "-"
+
+        return format_minutes(obj.total_minutes)
+
+
+@admin.register(Progress)
+class ProgressAdmin(admin.ModelAdmin):
+    """Correct a progress row by hand. Moves the current value without leaving
+    a dot on the trail (decision #26)."""
+
+    form = ProgressAdminForm
+    list_display = ("member", "book", "how_far", "updated_on")
+    list_select_related = ("member", "book")
+
+    @admin.display(description="How far")
+    def how_far(self, obj):
+        units = obj.units_read
+
+        if units is None:
+            return "not started"
+
+        return obj.book.describe_units(units, with_total=True)

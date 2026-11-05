@@ -1,5 +1,6 @@
 from django import forms
 
+from .duration import MinutesField, format_minutes
 from .models import Book, Member, Note, Progress, Question
 
 
@@ -80,24 +81,26 @@ class ProgressForm(forms.ModelForm):
     checked here rather than declared on the model.
     """
 
+    # Time is typed as "4h 12m" and stored as whole minutes (decision #34).
+    minutes_read = MinutesField(label="Time listened")
+
     class Meta:
         model = Progress
-        fields = ("pages_read", "chapters_read")
+        fields = ("pages_read", "chapters_read", "minutes_read")
         labels = {"pages_read": "Pages read", "chapters_read": "Chapters read"}
 
     def __init__(self, *args, book, **kwargs):
         super().__init__(*args, **kwargs)
         self.book = book
 
-        # `Book.measure` is the one place this choice is made. The field that
-        # does not apply is removed outright: `construct_instance` skips what
-        # is not in `cleaned_data`, so the other column keeps whatever it held.
-        self.unit_field = (
-            "chapters_read" if book.measure == "chapters" else "pages_read"
-        )
-        del self.fields[
-            "pages_read" if self.unit_field == "chapters_read" else "chapters_read"
-        ]
+        # `Book.measure` is the one place this choice is made. The fields that
+        # do not apply are removed outright: `construct_instance` skips what
+        # is not in `cleaned_data`, so the other columns keep whatever they
+        # held, and a hand-POSTed value for one of them is ignored.
+        self.unit_field = book.unit_column
+        for name in ("pages_read", "chapters_read", "minutes_read"):
+            if name != self.unit_field:
+                del self.fields[name]
 
         field = self.fields[self.unit_field]
         # `chapters_read` is nullable on the model, so that a row carrying only
@@ -106,7 +109,12 @@ class ProgressForm(forms.ModelForm):
         # blank here is a missing answer rather than an erasure.
         field.required = True
 
-        if book.total_units:
+        if book.measure == "minutes":
+            field.help_text = (
+                f"Out of {format_minutes(book.total_units)}. "
+                'For example "4h 12m", "90m" or "4:12".'
+            )
+        elif book.total_units:
             field.help_text = f"Out of {book.total_units}."
             field.widget.attrs["max"] = book.total_units
         else:
@@ -121,9 +129,13 @@ class ProgressForm(forms.ModelForm):
         total = self.book.total_units
 
         if units_read is not None and total and units_read > total:
+            length = (
+                format_minutes(total)
+                if self.book.measure == "minutes"
+                else f"{total} {self.book.measure}"
+            )
             self.add_error(
-                self.unit_field,
-                f"{self.book.title} is only {total} {self.book.measure} long.",
+                self.unit_field, f"{self.book.title} is only {length} long."
             )
 
         return cleaned_data
@@ -239,9 +251,28 @@ class BookForm(forms.ModelForm):
     says the same about why no `save()` override guards it.
     """
 
+    # Typed as "4h 12m", stored as whole minutes. Zero is a typo for a total
+    # (decision #24), so it is refused here rather than read as no duration.
+    total_minutes = MinutesField(
+        label="Total listening time",
+        required=False,
+        allow_zero=False,
+        help_text=(
+            'For an audiobook, for example "12h 30m" or "90m". One of pages, '
+            "chapters or listening time, never more than one."
+        ),
+    )
+
     class Meta:
         model = Book
-        fields = ("title", "author", "total_pages", "total_chapters", "started_on")
+        fields = (
+            "title",
+            "author",
+            "total_pages",
+            "total_chapters",
+            "total_minutes",
+            "started_on",
+        )
         labels = {
             "title": "Title",
             "author": "Author",
@@ -269,12 +300,24 @@ class BookForm(forms.ModelForm):
         """
         cleaned_data = super().clean()
 
-        if cleaned_data.get("total_pages") and cleaned_data.get("total_chapters"):
+        pages = cleaned_data.get("total_pages")
+        chapters = cleaned_data.get("total_chapters")
+        minutes = cleaned_data.get("total_minutes")
+
+        if pages and chapters:
             self.add_error(
                 "total_chapters",
                 "A book is measured in pages or in chapters, not both. Keep the "
                 "pages if the club shares an edition, and the chapters if it "
                 "does not — then clear the other.",
+            )
+        elif minutes and (pages or chapters):
+            kept = "pages" if pages else "chapters"
+            self.add_error(
+                "total_minutes",
+                f"A book is measured in {kept} or in listening time, not both. "
+                f"Keep the listening time for an audiobook and the {kept} for "
+                "a book the club reads on the page — then clear the other.",
             )
 
         return cleaned_data

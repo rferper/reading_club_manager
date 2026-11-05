@@ -1,4 +1,5 @@
 {% extends "club/base.html" %}
+{% load club_units %}
 
 {% block title %}How far are you? — Reading Club Manager{% endblock %}
 
@@ -12,8 +13,7 @@
 
   {% if progress.pk and progress.units_read is not None %}
     <p class="empty">
-      You last recorded {{ progress.units_read }}
-      {{ book.measure }}{% if progress.percent is not None %} — {{ progress.percent }}%{% endif %}
+      You last recorded {{ progress.units_read|counted:book }}{% if progress.percent is not None %} — {{ progress.percent }}%{% endif %}
       on {{ progress.updated_on }}. Saving again replaces it.
     </p>
   {% else %}

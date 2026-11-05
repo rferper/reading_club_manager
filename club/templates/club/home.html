@@ -1,4 +1,5 @@
 {% extends "club/base.html" %}
+{% load club_units %}
 
 {% block title %}{% if book %}{{ book.title }} — {% endif %}Reading Club Manager{% endblock %}
 
@@ -38,7 +39,7 @@
       <p class="byline">
         by {{ book.author }}
         {% if book.started_on %}· started {{ book.started_on }}{% endif %}
-        {% if book.total_units %}· {{ book.total_units }} {{ book.measure }}{% endif %}
+        {% if book.total_units %}· {{ book.total_units|counted:book }}{% endif %}
       </p>
     </div>
 

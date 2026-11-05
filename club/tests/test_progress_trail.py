@@ -563,3 +563,101 @@ class ProgressTrailLinksTests(TestCase):
         self.assertContains(
             response, reverse("club:history_detail", args=[self.finished.pk])
         )
+
+
+class ProgressTrailInMinutesTests(TestCase):
+    """An audiobook's trail, with a pages-only legacy entry underneath it."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.book = Book.objects.create(
+            title="Piranesi", author="Susanna Clarke", total_minutes=1300
+        )
+        cls.progress = Progress.objects.create(
+            book=cls.book, member=cls.ada, minutes_read=150
+        )
+        record(cls.progress, 30, pages_read=200)
+        record(cls.progress, 20, minutes_read=130)
+        record(cls.progress, 10, minutes_read=195)
+        record(cls.progress, 2, minutes_read=150)
+
+    def _get(self):
+        return self.client.get(
+            reverse("club:progress_trail", args=[self.book.pk, self.ada.pk])
+        )
+
+    def test_only_minutes_entries_are_listed(self):
+        listed = [row["entry"].minutes_read for row in self._get().context["rows"]]
+
+        self.assertEqual(listed, [150, 195, 130])
+
+    def test_the_pages_only_entry_is_counted_out_loud_in_its_own_unit(self):
+        response = self._get()
+
+        self.assertContains(response, "One earlier entry was")
+        self.assertContains(response, "recorded in pages")
+        self.assertContains(response, "measured in listening time")
+
+    def test_each_entry_reads_as_time_of_the_total(self):
+        response = self._get()
+
+        self.assertContains(response, "3h 15m of 21h 40m")
+        self.assertContains(response, "2h 10m of 21h 40m")
+        self.assertNotContains(response, "195")
+        self.assertNotContains(response, "1300")
+
+    def test_changes_are_signed_time_and_percent(self):
+        response = self._get()
+
+        self.assertContains(response, "+1h 5m, +5%")
+        self.assertContains(response, "-45m, -3%")
+
+    def test_the_header_gives_the_total_as_time(self):
+        self.assertContains(self._get(), "21h 40m")
+
+    def test_it_is_still_four_queries(self):
+        with self.assertNumQueries(4):
+            self._get()
+
+
+class ProgressTrailOfLegacyOnlyEntriesOnAMinutesBookTests(TestCase):
+    """Nothing but pages on a book that is now measured in time."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.book = Book.objects.create(
+            title="Piranesi", author="Susanna Clarke", total_minutes=1300
+        )
+        cls.progress = Progress.objects.create(
+            book=cls.book, member=cls.ada, pages_read=200
+        )
+        record(cls.progress, 5, pages_read=100)
+        record(cls.progress, 2, pages_read=200)
+
+    def test_the_trail_counts_them_and_lists_none(self):
+        response = self.client.get(
+            reverse("club:progress_trail", args=[self.book.pk, self.ada.pk])
+        )
+
+        self.assertEqual(response.context["rows"], [])
+        self.assertContains(response, "2 earlier entries were")
+        self.assertContains(response, "recorded in pages")
+
+
+class ProgressTrailBothOtherUnitsTests(TestCase):
+    """Entries in two other units are both named."""
+
+    def test_the_sentence_names_every_other_unit(self):
+        ada = Member.objects.create(name="Ada")
+        book = Book.objects.create(title="P", author="A", total_minutes=600)
+        progress = Progress.objects.create(book=book, member=ada)
+        record(progress, 5, pages_read=100)
+        record(progress, 3, chapters_read=4)
+
+        response = self.client.get(
+            reverse("club:progress_trail", args=[book.pk, ada.pk])
+        )
+
+        self.assertContains(response, "recorded in pages and chapters")
