@@ -8,12 +8,15 @@ denominator, and a book that changed measure underneath everybody.
 
 from datetime import timedelta
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.formats import date_format
 
 from ..models import Book, Member, Progress, ProgressEntry
+from .helpers import enter_admin
 
 
 def record(progress, days_ago, **counts):
@@ -683,3 +686,271 @@ class NullPagesTrailTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["rows"], [])
         self.assertNotContains(response, "0 of 400")
+
+
+class ProgressEntryRemovalTests(TestCase):
+    """Removing an older entry from your own trail on the current book (#31)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.ben = Member.objects.create(name="Ben")
+        cls.book = Book.objects.create(
+            title="Middlemarch",
+            author="George Eliot",
+            total_pages=5000,
+            is_current=True,
+        )
+        cls.progress = Progress.objects.create(
+            book=cls.book, member=cls.ada, pages_read=431
+        )
+        cls.first = record(cls.progress, 10, pages_read=100)
+        cls.typo = record(cls.progress, 5, pages_read=4310)
+        cls.newest = record(cls.progress, 1, pages_read=431)
+
+    def _identify(self, member):
+        session = self.client.session
+        session["member_id"] = member.pk
+        session.save()
+
+    def _make_admin(self):
+        session = self.client.session
+        enter_admin(session)
+        session.save()
+
+    def _trail_url(self, member=None):
+        return reverse(
+            "club:progress_trail", args=[self.book.pk, (member or self.ada).pk]
+        )
+
+    def _delete_url(self, entry, book=None, member=None):
+        return reverse(
+            "club:progress_entry_delete",
+            args=[(book or self.book).pk, (member or self.ada).pk, entry.pk],
+        )
+
+    def _remaining(self):
+        return list(
+            self.progress.entries.order_by("recorded_on", "pk").values_list(
+                "pages_read", flat=True
+            )
+        )
+
+    # Removal
+
+    def test_the_owner_removes_an_older_entry_and_lands_on_the_trail(self):
+        self._identify(self.ada)
+
+        response = self.client.post(self._delete_url(self.typo))
+
+        self.assertRedirects(response, self._trail_url())
+        self.assertEqual(self._remaining(), [100, 431])
+
+    def test_removal_says_so(self):
+        self._identify(self.ada)
+
+        response = self.client.post(self._delete_url(self.typo), follow=True)
+
+        self.assertContains(response, "Entry removed.")
+
+    def test_removal_leaves_the_progress_row_untouched(self):
+        self._identify(self.ada)
+        before = Progress.objects.values().get(pk=self.progress.pk)
+
+        self.client.post(self._delete_url(self.typo))
+
+        self.assertEqual(Progress.objects.values().get(pk=self.progress.pk), before)
+
+    def test_the_change_figures_are_recomputed_from_what_remains(self):
+        self._identify(self.ada)
+        self.client.post(self._delete_url(self.typo))
+
+        rows = self.client.get(self._trail_url()).context["rows"]
+
+        self.assertEqual([r["change"] for r in rows], [331, None])
+
+    def test_removing_the_oldest_entry_gives_the_new_oldest_no_change_figure(self):
+        self._identify(self.ada)
+        self.client.post(self._delete_url(self.first))
+
+        rows = self.client.get(self._trail_url()).context["rows"]
+
+        self.assertEqual([r["change"] for r in rows], [-3879, None])
+
+    def test_typo_walkthrough_end_to_end(self):
+        """100, 4310, then 431 saved on the update form, then 4310 removed."""
+        self.progress.entries.exclude(pk=self.first.pk).delete()
+        Progress.objects.filter(pk=self.progress.pk).update(pages_read=100)
+        self._identify(self.ada)
+
+        self.client.post(reverse("club:progress_update"), {"pages_read": 4310})
+        self.client.post(reverse("club:progress_update"), {"pages_read": 431})
+        typo = self.progress.entries.get(pages_read=4310)
+        self.client.post(self._delete_url(typo))
+
+        self.assertEqual(self._remaining(), [100, 431])
+        self.progress.refresh_from_db()
+        self.assertEqual(self.progress.pages_read, 431)
+
+    # Refusals
+
+    def test_the_newest_entry_is_refused_with_a_message_and_a_redirect(self):
+        self._identify(self.ada)
+
+        response = self.client.post(self._delete_url(self.newest), follow=True)
+
+        self.assertRedirects(response, self._trail_url())
+        self.assertContains(response, "Save the correct number first")
+        self.assertEqual(self._remaining(), [100, 4310, 431])
+
+    def test_the_only_entry_is_refused(self):
+        self.progress.entries.exclude(pk=self.newest.pk).delete()
+        self._identify(self.ada)
+
+        response = self.client.post(self._delete_url(self.newest), follow=True)
+
+        self.assertContains(response, "Save the correct number first")
+        self.assertEqual(self._remaining(), [431])
+
+    def test_another_member_gets_a_403_and_nothing_is_deleted(self):
+        self._identify(self.ben)
+
+        response = self.client.post(self._delete_url(self.typo))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self._remaining(), [100, 4310, 431])
+
+    def test_an_admin_who_is_not_the_owner_still_gets_a_403(self):
+        self._identify(self.ben)
+        self._make_admin()
+
+        response = self.client.post(self._delete_url(self.typo))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self._remaining(), [100, 4310, 431])
+
+    def test_an_unidentified_post_gets_a_403(self):
+        response = self.client.post(self._delete_url(self.typo))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self._remaining(), [100, 4310, 431])
+
+    def test_a_finished_book_is_refused_with_a_message_and_nothing_is_deleted(self):
+        Book.objects.filter(pk=self.book.pk).update(is_current=False)
+        self._identify(self.ada)
+
+        response = self.client.post(self._delete_url(self.typo), follow=True)
+
+        self.assertRedirects(response, self._trail_url())
+        self.assertContains(response, "no longer being read")
+        self.assertEqual(self._remaining(), [100, 4310, 431])
+
+    def test_get_is_a_405(self):
+        self._identify(self.ada)
+
+        response = self.client.get(self._delete_url(self.typo))
+
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(self._remaining(), [100, 4310, 431])
+
+    def test_an_entry_on_another_members_row_is_a_404(self):
+        other = Progress.objects.create(book=self.book, member=self.ben, pages_read=9)
+        theirs = record(other, 3, pages_read=9)
+        self._identify(self.ada)
+
+        response = self.client.post(self._delete_url(theirs))
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(ProgressEntry.objects.filter(pk=theirs.pk).exists())
+
+    def test_an_entry_under_the_wrong_book_is_a_404(self):
+        other_book = Book.objects.create(title="Other", author="X")
+        self._identify(self.ada)
+
+        response = self.client.post(self._delete_url(self.typo, book=other_book))
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self._remaining(), [100, 4310, 431])
+
+    def test_unknown_book_member_and_entry_are_404s(self):
+        self._identify(self.ada)
+        for args in (
+            [9999, self.ada.pk, self.typo.pk],
+            [self.book.pk, 9999, self.typo.pk],
+            [self.book.pk, self.ada.pk, 9999],
+        ):
+            with self.subTest(args=args):
+                response = self.client.post(
+                    reverse("club:progress_entry_delete", args=args)
+                )
+                self.assertEqual(response.status_code, 404)
+
+    # Other unit
+
+    def test_an_entry_in_another_unit_can_be_removed_and_the_count_updates(self):
+        old = record(self.progress, 30, chapters_read=3)
+        record(self.progress, 29, chapters_read=4)
+        self._identify(self.ada)
+        self.assertContains(
+            self.client.get(self._trail_url()), "2 earlier entries were"
+        )
+
+        response = self.client.post(self._delete_url(old), follow=True)
+
+        self.assertContains(response, "One earlier entry was")
+        self.assertFalse(ProgressEntry.objects.filter(pk=old.pk).exists())
+
+    # Buttons
+
+    def _button_count(self, response):
+        return response.content.decode().count("/entries/")
+
+    def test_the_owner_sees_a_button_on_every_entry_but_the_newest(self):
+        self._identify(self.ada)
+
+        response = self.client.get(self._trail_url())
+
+        self.assertContains(response, self._delete_url(self.typo))
+        self.assertContains(response, self._delete_url(self.first))
+        self.assertNotContains(response, self._delete_url(self.newest))
+
+    def test_the_button_is_a_post_form_with_csrf(self):
+        self._identify(self.ada)
+
+        response = self.client.get(self._trail_url())
+
+        self.assertContains(
+            response, f'method="post" action="{self._delete_url(self.typo)}"'
+        )
+        self.assertContains(response, "csrfmiddlewaretoken")
+
+    def test_no_buttons_for_an_unidentified_viewer(self):
+        self.assertEqual(self._button_count(self.client.get(self._trail_url())), 0)
+
+    def test_no_buttons_on_someone_elses_trail(self):
+        self._identify(self.ben)
+
+        self.assertEqual(self._button_count(self.client.get(self._trail_url())), 0)
+
+    def test_no_buttons_for_an_admin_on_someone_elses_trail(self):
+        self._make_admin()
+
+        self.assertEqual(self._button_count(self.client.get(self._trail_url())), 0)
+
+    def test_no_buttons_on_a_finished_books_trail(self):
+        Book.objects.filter(pk=self.book.pk).update(is_current=False)
+        self._identify(self.ada)
+
+        self.assertEqual(self._button_count(self.client.get(self._trail_url())), 0)
+
+    def test_buttons_add_no_per_row_query(self):
+        self._identify(self.ada)
+        self.client.get(self._trail_url())
+        with CaptureQueriesContext(connection) as few:
+            self.client.get(self._trail_url())
+        for i in range(20):
+            record(self.progress, 9, pages_read=500 + i)
+        with CaptureQueriesContext(connection) as many:
+            self.client.get(self._trail_url())
+
+        self.assertEqual(len(few), len(many))
