@@ -415,8 +415,14 @@ def progress_overview(request):
         rows = [
             {
                 "member": member,
-                "units_read": member.recorded_units or 0,
-                "percent": book.percent_of(member.recorded_units or 0),
+                # None is "nothing recorded" (decision #19); a recorded zero
+                # stays 0. No `or 0`: that would turn the first into the second.
+                "units_read": member.recorded_units,
+                "percent": (
+                    None
+                    if member.recorded_units is None
+                    else book.percent_of(member.recorded_units)
+                ),
                 "has_recorded": member.recorded_units is not None,
             }
             for member in members

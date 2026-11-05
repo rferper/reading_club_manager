@@ -55,7 +55,9 @@
             </td>
 
             <td>
-              {% if book.total_units %}
+              {% if book.total_units and not row.has_recorded %}
+                <span class="empty">no progress yet</span>
+              {% elif book.total_units %}
                 {% comment %}
                   The number is the content and the bar is decoration, so the
                   bar is hidden from assistive technology rather than repeated
