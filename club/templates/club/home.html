@@ -59,6 +59,7 @@
       <div class="admin-only question__controls">
         <a href="{% url 'club:book_edit' book.pk %}">Edit this book</a>
         <a href="{% url 'club:book_finish' book.pk %}">Finish this book</a>
+        <a href="{% url 'club:book_delete' book.pk %}">Delete this book</a>
       </div>
     {% endif %}
   {% else %}

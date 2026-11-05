@@ -145,13 +145,13 @@ class ConfirmationTests(BookDeleteBase):
     def test_empty_book_says_nothing_else_is_attached(self):
         self.admin()
         response = self.client.get(self.url(self.old))
-        self.assertContains(response, "nothing else is attached")
+        self.assertContains(response, "Nothing else is attached")
 
     def test_counts_match_a_loaded_book(self):
         load(self.current, self.ada, self.bob)
         self.admin()
         response = self.client.get(self.url(self.current))
-        self.assertNotContains(response, "nothing else is attached")
+        self.assertNotContains(response, "Nothing else is attached")
         self.assertEqual(
             response.context["counts"],
             {

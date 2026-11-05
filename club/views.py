@@ -12,7 +12,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods, require_POST
 
 from .decorators import club_admin_required, require_member
 from .forms import (
@@ -1414,6 +1414,79 @@ def _rating_initial(rating):
     comes back with an error or somebody arrives at the URL directly.
     """
     return {"score": rating.score} if rating is not None else None
+
+
+BOOK_DELETE_LINES = (
+    ("progress", "progress record", "progress records"),
+    ("entries", "progress entry", "progress entries"),
+    ("notes", "note", "notes"),
+    ("note_replies", "reply to a note", "replies to notes"),
+    ("reactions", "reaction", "reactions"),
+    ("questions", "question", "questions"),
+    ("answers", "answer", "answers"),
+    ("answer_replies", "reply to an answer", "replies to answers"),
+    ("ratings", "member score", "member scores"),
+)
+
+
+def _book_attachments(book):
+    """Count what deleting `book` takes with it: a fixed nine queries.
+
+    Returns the raw counts and the non-zero ones as ready-made phrases, so the
+    confirmation page and the success message cannot disagree.
+    """
+    notes = Note.objects.filter(book=book)
+    counts = {
+        "progress": Progress.objects.filter(book=book).count(),
+        "entries": ProgressEntry.objects.filter(progress__book=book).count(),
+        "notes": notes.filter(parent__isnull=True).count(),
+        "note_replies": notes.filter(parent__isnull=False).count(),
+        "reactions": Reaction.objects.filter(note__book=book).count(),
+        "questions": Question.objects.filter(book=book).count(),
+        "answers": Answer.objects.filter(question__book=book).count(),
+        "answer_replies": AnswerReply.objects.filter(
+            answer__question__book=book
+        ).count(),
+        "ratings": MemberRating.objects.filter(book=book).count(),
+    }
+    phrases = [
+        f"{counts[key]} {one if counts[key] == 1 else many}"
+        for key, one, many in BOOK_DELETE_LINES
+        if counts[key]
+    ]
+    return counts, phrases
+
+
+@require_http_methods(["GET", "POST"])
+@club_admin_required
+def book_delete(request, pk):
+    """Remove a book created by mistake, and everything attached to it.
+
+    GET renders a confirmation that counts what goes with the book and changes
+    nothing; POST deletes in one transaction (decision #45). Every FK off a
+    book cascades, and the PROTECT FKs point at Member, so nothing blocks it.
+    """
+    book = get_object_or_404(Book, pk=pk)
+    counts, phrases = _book_attachments(book)
+
+    if request.method == "POST":
+        was_current = book.is_current
+        title = book.title
+        with transaction.atomic():
+            book.delete()
+        if phrases:
+            messages.success(
+                request, f"{title} deleted, along with {', '.join(phrases)}."
+            )
+        else:
+            messages.success(request, f"{title} deleted.")
+        return redirect("club:home" if was_current else "club:history")
+
+    return render(
+        request,
+        "club/book_confirm_delete.html",
+        {"book": book, "counts": counts, "phrases": phrases},
+    )
 
 
 @require_member
