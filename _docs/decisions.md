@@ -1239,7 +1239,7 @@ any number of notes, pinned in `test_reactions.py`.
 
 **Accepted.** Reacting from a `?chapter=N` view returns to the unfiltered `/notes/`.
 Other reaction types (#55), who reacted (#56), reactions on answers (#57) and on replies
-or in the archive (#58) are not done here.
+or in the archive (#58) are not done here. (Amended by 50: the archive shows the count of top-level notes, read-only, in #58.)
 
 
 ## 43. Replies to answers are their own model, one level deep, immutable
@@ -1380,3 +1380,31 @@ panel is still counts-only, and Mark as seen is unchanged.
 
 **Amendments.** 43 said replies are not in the home page's panel and 46 said replies to
 answers stay out of it; both are amended here, with their old wording left as history.
+
+
+## 50. The archive shows each top-level note's final Agree count, read-only
+
+**Issue:** #58. **Amends:** 42 (the "Accepted" line that listed the archive as not done).
+
+**What it shows.** `/history/<pk>/` prints "Agree (N)" in the byline of every top-level note
+whose N is at least 1. A note nobody agreed with shows no Agree text at all: a read-only
+"Agree (0)" is noise, while the notes page keeps its "Agree (0)" next to its button. Only
+top-level notes of the current book can be agreed with (42), so a finished book's counts
+are frozen and the archive is the final tally.
+
+**Read-only for everyone.** No form, no button and no link to `note_react` on the archive,
+for an anonymous viewer, a member or an admin. The current book's preview there shows the
+count too, still without a button (22); reacting stays on `/notes/`. Closing the discussion
+(23) is unchanged.
+
+**Same number as the notes page.** The count is the `agree_count` annotation that
+`_top_level_notes` already puts on every note for both pages, so a deactivated member's
+reaction counts (3, 42), and a book that is reopened and finished again keeps its reactions,
+because finishing and reopening never touch them.
+
+**No cost.** No new query, no view change, no migration. The archive stays at 8 queries on a
+book with a question, an answer and an answer reply, and is equal at 1 and 21 notes; both
+are pinned in `test_reactions.py` as regression guards, since they held before the change.
+
+**Not here.** Replies show no count and no control. Whether replies can be reacted to is
+#61. Reaction types (#55), who reacted (#56) and reactions on answers (#57) are separate.
