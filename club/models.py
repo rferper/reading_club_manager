@@ -19,6 +19,11 @@ class Member(models.Model):
     is_active = models.BooleanField(default=True)
     joined_on = models.DateField(default=timezone.localdate)
 
+    # When this member last pressed "Mark as seen" on the home page. Null means
+    # never, and the panel then counts from the start of `joined_on`
+    # (decision #31). Only that POST writes it; a page load never does.
+    notifications_seen_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = [Lower("name")]
         constraints = [
@@ -87,6 +92,10 @@ class Book(models.Model):
     )
 
     is_current = models.BooleanField(default=False)
+
+    # When the row was made, for "a new book started" (decision #31). The date
+    # fields cannot say: `started_on` is optional and has no time.
+    created_on = models.DateTimeField(auto_now_add=True)
 
     objects = BookManager()
 
