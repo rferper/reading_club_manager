@@ -1,0 +1,35 @@
+{% extends "club/base.html" %}
+
+{% block title %}Reopen {{ book.title }} — Reading Club Manager{% endblock %}
+
+{% block content %}
+  <h1>Reopen this book?</h1>
+
+  <div class="panel">
+    <p class="current-book__title">{{ book.title }}</p>
+    <p class="byline">
+      by {{ book.author }}{% if book.started_on %} · started {{ book.started_on }}{% endif %}
+    </p>
+  </div>
+
+  {% if other %}
+    <p class="empty">
+      {{ other.title }} is the current read, and the club has only one at a
+      time. Finish it first, then come back to reopen {{ book.title }}.
+    </p>
+    <p><a href="{% url 'club:history_detail' book.pk %}">Back to {{ book.title }}</a></p>
+  {% else %}
+    <p class="empty">
+      Reopening makes {{ book.title }} the current read again. Its finish date
+      is cleared; the rating, scores, progress, notes, questions and answers
+      stay exactly where they are.
+    </p>
+
+    <form class="admin-only" method="post">
+      {% csrf_token %}
+      <button type="submit">Reopen this book</button>
+    </form>
+
+    <p><a href="{% url 'club:history_detail' book.pk %}">Leave it finished</a></p>
+  {% endif %}
+{% endblock %}

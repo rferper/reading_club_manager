@@ -881,3 +881,22 @@ over-long value is a normal search, not a 500. The echoed query is autoescaped.
 **The two empty states differ.** "The club has not finished a book yet" shows only
 when the archive itself is empty and no search was made; a search with no results
 names the query and links back to the full list.
+
+## 30. Reopen keeps the rating and scores, clears only `finished_on`, and refuses while another book is current
+
+**Reopening is the inverse of finishing, and only moves the flag.** `book_reopen` sets
+`is_current=True` and clears `finished_on`. `started_on`, the club `rating`, every
+member score and every progress row, note, reply, question and answer stay on the row
+(decision #2): scores sit dormant while the book is current (decision #23) and apply
+again when it is finished a second time. The finish form already defaults its date to
+today, so re-finishing needs no special case.
+
+**Refused while another book is current.** The partial unique index allows one current
+read (decision #2). The admin finishes the current book first; the app never swaps or
+finishes it automatically. The confirmation page says so, a POST adds an error message
+and changes nothing, and an `IntegrityError` from a race is caught the same way, so
+there is no 500.
+
+**Admin-only, re-checked in the view; a current or unknown book is a 404.** A GET only
+renders the confirmation page; the change is a POST with CSRF and a redirect home
+(decisions #14 and #16). The "Reopen" link on the archive page is cosmetic.
