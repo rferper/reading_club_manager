@@ -23,6 +23,18 @@
             from other members
           </li>
         {% endif %}
+        {% if whats_new.note_count %}
+          <li>
+            <a href="{% url 'club:notes' %}">{{ whats_new.note_count }} new note{{ whats_new.note_count|pluralize }}</a>
+            from other members
+          </li>
+        {% endif %}
+        {% if whats_new.reply_count %}
+          <li>
+            <a href="{% url 'club:notes' %}">{{ whats_new.reply_count }} new {{ whats_new.reply_count|pluralize:"reply,replies" }}</a>
+            from other members
+          </li>
+        {% endif %}
       </ul>
       <form method="post" action="{% url 'club:mark_seen' %}">
         {% csrf_token %}
