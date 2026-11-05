@@ -160,6 +160,16 @@ class Book(models.Model):
         return f"{self.title} by {self.author}"
 
     @property
+    def is_finished(self):
+        """Whether the club has finished this book: not current, and dated.
+
+        The one definition of "finished" that rating hangs on (decision #36).
+        A book that is neither current nor dated is the abandoned shape
+        `/history/` lists with "no finish date recorded" (decision #22).
+        """
+        return not self.is_current and self.finished_on is not None
+
+    @property
     def measure(self):
         """What this book is measured in: ``"minutes"``, ``"chapters"`` or ``"pages"``.
 
