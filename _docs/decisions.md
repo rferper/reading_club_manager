@@ -1116,3 +1116,15 @@ required field (member name, member choice, the unit read, question text, book t
 finish date, score). No field was changed and no `required=True` was added. If a form
 with only optional fields is added later, an empty POST will save it, and that is to be
 decided for that form rather than hidden.
+
+
+## 38. A member with nothing recorded gets no percentage and no bar
+
+Settled while building #30.
+
+**The rule.** On the progress overview, a row with no recorded count (NULL, decision
+#19) carries `units_read` and `percent` of `None`, and its "How far" cell says "no
+progress yet" in the `empty` style. A recorded zero keeps "0%" and a zero-width bar.
+The view no longer substitutes `or 0`, and the template draws the bar only for a row
+that has a count. A book with no total still says "no page or chapter count recorded".
+The archive already behaved this way and is pinned by a test.
