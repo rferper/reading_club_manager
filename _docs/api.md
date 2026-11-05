@@ -35,14 +35,14 @@ route that is not here.
 | `/members/<pk>/toggle/` | `member_toggle` | POST | Admin | Deactivate or reactivate a member | #5 | Built |
 | `/progress/` | `progress` | GET | Public | Everyone's progress on the current book, furthest first | #10 | Built |
 | `/progress/update/` | `progress_update` | GET, POST | Member | How far you have read the current book, counted in whatever that book is measured in — pages, or chapters: GET the form, POST to save. A save also appends a `ProgressEntry` unless the number is unchanged | #9, #17, #18 | Built |
-| `/notes/` | `notes` | GET, POST | GET Public, POST Member | Notes newest-first, plus the add form | #11 | Built |
-| `/notes/<pk>/delete/` | `note_delete` | POST | Author or Admin | Remove a note | #11 | Built |
+| `/notes/` | `notes` | GET, POST | GET Public, POST Member | Top-level notes newest-first, each with its replies beneath it oldest-first, plus the add form and a reply form per note. POST with a hidden `parent` is a reply to that top-level note of the current book (author from the session, book from the parent); anything else is a new note. A `parent` that is missing, junk, a reply, or on a finished book is a form error and writes nothing | #11, #19 | Built |
+| `/notes/<pk>/delete/` | `note_delete` | POST | Author or Admin | Remove a note or a reply. Removing a top-level note also removes its replies and the message says how many | #11, #19 | Built |
 | `/questions/` | `questions` | GET, POST | GET Public, POST Member | Questions in order with their answers; POST submits your answer | #12, #13 | Built |
 | `/questions/add/` | `question_add` | GET, POST | Admin | Post a discussion question | #12 | Built |
 | `/questions/<pk>/edit/` | `question_edit` | GET, POST | Admin | Edit or reorder a question | #12 | Built |
 | `/questions/<pk>/delete/` | `question_delete` | GET, POST | Admin | Remove a question and its answers | #12 | Built |
 | `/history/` | `history` | GET | Public | Every book that is not the current read, newest finished first, uncapped | #14 | Built |
-| `/history/<pk>/` | `history_detail` | GET | Public | One book: its progress, notes, answers and every member's score. The discussion is read-only; an identified member also gets a rating form here, posting to `book_rate` | #14, #16 | Built |
+| `/history/<pk>/` | `history_detail` | GET | Public | One book: its progress, notes (with their replies beneath, read-only), answers and every member's score. The discussion is read-only; an identified member also gets a rating form here, posting to `book_rate` | #14, #16 | Built |
 | `/books/start/` | `book_start` | GET, POST | Admin | Start a new current book | #14 | Built |
 | `/books/<pk>/edit/` | `book_edit` | GET, POST | Admin | Edit a book's metadata | #14 | Built |
 | `/books/<pk>/finish/` | `book_finish` | GET, POST | Admin | Record finish date and rating; clear the current flag | #14 | Built |

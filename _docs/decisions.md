@@ -806,3 +806,49 @@ not recorded anything", never a bar at zero.
 
 **The overview links only active members; the archive links every row,** the
 deactivated member's included (decision #3).
+
+## 28. Replies are notes with a parent: one level, cascade, oldest first
+
+Settled while building replies (#19). Calls the issue left to the implementer,
+plus the ones it fixed, so they are written down once.
+
+**A reply is a `Note` whose nullable `parent` points at a top-level note.** One
+model, one removal rule (`may_be_removed_by`), one route (`note_delete`), and
+one column. A separate `Reply` model would have meant a second copy of all
+three. Replies are notes, so decision #7 applies: they are immutable and
+deletable, never editable.
+
+**One level, enforced in `Note.clean()` and `ReplyForm`, not by a
+`CheckConstraint`.** The two rules - the parent is not itself a reply, and the
+parent is on the same book - compare a row with *another* row. A database
+`CheckConstraint` only sees its own row, so it cannot say either. This departs
+from the house pattern of decisions #2, #17 and #24 for that reason alone. The
+form is the path the app uses: `ReplyForm.parent` is a `ModelChoiceField` over
+the current book's top-level notes (decision #21), so a reply's id, a note on a
+finished book (decision #23), a missing id and `abc` are all one form error
+and nothing is written. A fixture or a shell can still skip `clean()`; that is
+the cost of the rule living above the schema. There is no `save()` override
+(decision #17).
+
+**Deleting a top-level note deletes its replies (`CASCADE`).** The alternatives
+- reparenting, or a "[removed]" tombstone - need either a rule about who
+inherits a thread or a second kind of row, and both are larger than the club
+needs. The cascade is stated before the POST on the button ("Remove (also
+removes N replies)") and after it in the message, because a destructive action
+that surprises is worse than one that is merely destructive. `Note.author`
+stays `PROTECT` (decision #20).
+
+**Replies read oldest first under their note; top-level notes stay newest
+first.** A conversation reads downward. The top-level order is unchanged
+(decisions #7 and #20).
+
+**A reply posts to `/notes/`, told apart from a note by the presence of a
+`parent` key.** No per-note route. A present-but-empty or junk `parent` is a
+reply with a bad target, not a plain note, so it errors rather than quietly
+becoming a top-level note. A target error has no note to sit under, so it is
+shown above the list; a body error sits under the note replied to, and every
+other reply form stays unbound.
+
+**Replies are not notes for counting or listing.** The notes page and the
+archive list top-level notes only, with replies prefetched beneath them in one
+query, so the page's query count does not grow with the thread (decision #19).
