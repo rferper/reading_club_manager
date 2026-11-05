@@ -1,5 +1,6 @@
 """The group overview: who is ahead, who is behind, and who has not started."""
 
+import re
 from datetime import date
 
 from django.test import TestCase
@@ -43,15 +44,15 @@ class ProgressOverviewTests(TestCase):
 
         self.assertEqual(self._names(response), ["Bob", "Ada", "Cleo"])
 
-    def test_a_member_with_nothing_recorded_appears_at_zero(self):
+    def test_a_member_with_nothing_recorded_still_appears_with_no_number(self):
         """Omitting them would make the table quietly wrong about who is
         behind — the person who has not started is exactly who it is about."""
         response = self.client.get(reverse("club:progress"))
 
         cleo = response.context["rows"][-1]
         self.assertEqual(cleo["member"], self.cleo)
-        self.assertEqual(cleo["units_read"], 0)
-        self.assertEqual(cleo["percent"], 0)
+        self.assertIsNone(cleo["units_read"])
+        self.assertIsNone(cleo["percent"])
         self.assertIs(cleo["has_recorded"], False)
         self.assertContains(response, "not started")
 
@@ -109,7 +110,7 @@ class ProgressOverviewTests(TestCase):
 
         cleo = response.context["rows"][-1]
         self.assertEqual(cleo["member"], self.cleo)
-        self.assertEqual(cleo["units_read"], 0)
+        self.assertIsNone(cleo["units_read"])
 
 
 class ProgressOverviewQueryCountTests(TestCase):
@@ -520,3 +521,68 @@ class ProgressOverviewInMinutesQueryCountTests(TestCase):
             response = self.client.get(reverse("club:progress"))
 
         self.assertEqual(len(response.context["rows"]), 22)
+
+
+class ProgressOverviewNotStartedCellTests(TestCase):
+    """#30: nothing recorded draws no "0%" and no bar; a recorded zero does.
+
+    One page per measure, with a member who has not started, one who recorded
+    a zero, and one part-way, so the three rows are compared side by side.
+    """
+
+    CASES = [
+        ("pages", {"total_pages": 880}, "pages_read", "0 of 880 pages", 440),
+        ("chapters", {"total_chapters": 30}, "chapters_read", "0 of 30 chapters", 15),
+        ("minutes", {"total_minutes": 750}, "minutes_read", "0m of 12h 30m", 375),
+    ]
+
+    def _cells(self, response, name):
+        html = response.content.decode()
+        row = next(
+            r for r in re.findall(r"<tr>.*?</tr>", html, re.S) if ">%s</a>" % name in r
+        )
+        tds = re.findall(r"<td>(.*?)</td>", row, re.S)
+        return tds
+
+    def test_not_started_has_no_percent_and_no_bar_on_every_measure(self):
+        for label, total, column, zero_text, part in self.CASES:
+            with self.subTest(measure=label):
+                Book.objects.all().delete()
+                Member.objects.all().delete()
+                book = Book.objects.create(
+                    title="B", author="A", is_current=True, **total
+                )
+                ada = Member.objects.create(name="Ada")
+                bob = Member.objects.create(name="Bob")
+                Member.objects.create(name="Cleo")
+                Progress.objects.create(book=book, member=ada, **{column: part})
+                Progress.objects.create(book=book, member=bob, **{column: 0})
+
+                response = self.client.get(reverse("club:progress"))
+                rows = {r["member"].name: r for r in response.context["rows"]}
+
+                self.assertIsNone(rows["Cleo"]["units_read"])
+                self.assertIsNone(rows["Cleo"]["percent"])
+                self.assertEqual(rows["Bob"]["units_read"], 0)
+                self.assertEqual(rows["Bob"]["percent"], 0)
+                self.assertEqual(
+                    [r["member"].name for r in response.context["rows"]],
+                    ["Ada", "Bob", "Cleo"],
+                )
+
+                cleo_count, cleo_pct = self._cells(response, "Cleo")
+                self.assertIn("not started", cleo_count)
+                self.assertNotIn("0%", cleo_pct)
+                self.assertNotIn("progress__fill", cleo_pct)
+                self.assertNotIn('class="progress"', cleo_pct)
+                self.assertTrue(cleo_pct.strip())
+                self.assertIn('class="empty"', cleo_pct)
+
+                bob_count, bob_pct = self._cells(response, "Bob")
+                self.assertIn(zero_text, bob_count)
+                self.assertIn("0%", bob_pct)
+                self.assertIn("width: 0%", bob_pct)
+
+                ada_count, ada_pct = self._cells(response, "Ada")
+                self.assertIn("50%", ada_pct)
+                self.assertIn('aria-hidden="true"', ada_pct)
