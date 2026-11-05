@@ -29,7 +29,14 @@ from .forms import (
     ProgressForm,
     QuestionForm,
 )
-from .identity import current_member, forget_member, remember_member
+from .identity import (
+    begin_admin,
+    current_member,
+    end_admin,
+    forget_member,
+    is_admin,
+    remember_member,
+)
 from .models import (
     Answer,
     Book,
@@ -148,7 +155,7 @@ def admin_pin(request):
     # the variable was set. A blank PIN fails closed: admin mode is unreachable.
     pin_configured = bool(settings.CLUB_ADMIN_PIN)
 
-    if request.session.get("is_club_admin"):
+    if is_admin(request):
         return redirect(destination)
 
     form = AdminPinForm()
@@ -160,7 +167,7 @@ def admin_pin(request):
             # str, so an accented PIN would otherwise 500 rather than refuse.
             submitted = form.cleaned_data["pin"].encode()
             if hmac.compare_digest(submitted, settings.CLUB_ADMIN_PIN.encode()):
-                request.session["is_club_admin"] = True
+                begin_admin(request)
                 messages.success(request, "Admin mode is on.")
                 return redirect(destination)
             form.add_error("pin", "That PIN is not right.")
@@ -184,7 +191,7 @@ def admin_exit(request):
     `require_POST` is outermost on purpose: a GET is a 405 whatever the session
     holds, so the route never answers a state change to a link.
     """
-    request.session.pop("is_club_admin", None)
+    end_admin(request)
     messages.success(request, "Admin mode is off.")
     return redirect("club:home")
 
@@ -527,7 +534,7 @@ def _top_level_notes(book):
 def _render_notes(request, form, reply_form=None):
     book = Book.objects.current()
     viewer = current_member(request)
-    is_admin = bool(request.session.get("is_club_admin"))
+    viewer_is_admin = is_admin(request)
 
     # Each note is paired with whether this viewer may remove it, asked of the
     # model rather than re-derived in the template. The button is decoration
@@ -553,10 +560,10 @@ def _render_notes(request, form, reply_form=None):
         rows.append(
             {
                 "note": note,
-                "may_remove": note.may_be_removed_by(viewer, is_admin),
+                "may_remove": note.may_be_removed_by(viewer, viewer_is_admin),
                 "reply_count": len(replies),
                 "replies": [
-                    {"note": r, "may_remove": r.may_be_removed_by(viewer, is_admin)}
+                    {"note": r, "may_remove": r.may_be_removed_by(viewer, viewer_is_admin)}
                     for r in replies
                 ],
                 "reply_form": note_reply_form,
@@ -638,7 +645,7 @@ def note_delete(request, pk):
     note = get_object_or_404(Note, pk=pk)
 
     if not note.may_be_removed_by(
-        current_member(request), request.session.get("is_club_admin")
+        current_member(request), is_admin(request)
     ):
         raise PermissionDenied("A note is removed by the member who wrote it.")
 

@@ -8,6 +8,7 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
+from .helpers import enter_admin
 from ..models import Book, Member, Note
 
 
@@ -29,7 +30,7 @@ class ReplyTestBase(TestCase):
         session = self.client.session
         session["member_id"] = member.pk
         if admin:
-            session["is_club_admin"] = True
+            enter_admin(session)
         session.save()
 
     def reply_to(self, parent, body="A reply"):

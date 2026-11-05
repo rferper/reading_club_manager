@@ -1,5 +1,7 @@
 """The admin PIN: the form, the gate, and what refusal means."""
 
+import datetime
+from unittest import mock
 from urllib.parse import urlencode
 
 from django.contrib.auth.models import User
@@ -8,8 +10,11 @@ from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from ..decorators import club_admin_required
+from ..models import Member
+from .helpers import enter_admin
 
 
 @override_settings(CLUB_ADMIN_PIN="1234")
@@ -53,7 +58,7 @@ class AdminPinFormTests(TestCase):
 
     def test_pin_page_skips_the_form_once_the_flag_is_set(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
         response = self.client.get(reverse("club:admin_pin"))
@@ -62,7 +67,7 @@ class AdminPinFormTests(TestCase):
 
     def test_pin_page_honours_next_when_the_flag_is_already_set(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
         response = self.client.get(reverse("club:admin_pin"), {"next": "/somewhere/"})
@@ -129,7 +134,7 @@ class AdminExitTests(TestCase):
 
     def setUp(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
     def test_post_clears_the_flag_and_says_so(self):
@@ -205,7 +210,7 @@ class ClubAdminRequiredTests(TestCase):
         for method in ("get", "post"):
             with self.subTest(method=method):
                 request = self._request(method)
-                request.session["is_club_admin"] = True
+                enter_admin(request.session)
 
                 response = self.gated(request)
 
@@ -226,7 +231,7 @@ class AdminModeIndicatorTests(TestCase):
 
     def test_an_admin_sees_the_indicator_and_a_post_form_to_leave(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
         response = self.client.get(reverse("club:home"))
@@ -254,9 +259,203 @@ class AdminModeLifetimeTests(TestCase):
         self.client.force_login(superuser)
 
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
         self.client.logout()
 
         self.assertNotIn("is_club_admin", self.client.session)
+
+
+@override_settings(
+    CLUB_ADMIN_PIN="1234", CLUB_ADMIN_IDLE_SECONDS=100, CLUB_ADMIN_MAX_SECONDS=1000
+)
+class AdminModeExpiryTests(TestCase):
+    """Admin mode lapses on idle time or total age (decision #33).
+
+    The clock is patched, never slept on. Offsets are distinct whole seconds,
+    so a coarse Windows clock tick cannot make two moments tie.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+
+    def setUp(self):
+        self.base = timezone.now()
+
+    def at(self, seconds):
+        """Patch `timezone.now` to `base + seconds` for the with-block."""
+        return mock.patch(
+            "django.utils.timezone.now",
+            return_value=self.base + datetime.timedelta(seconds=seconds),
+        )
+
+    def enter_admin_at(self, seconds):
+        with self.at(seconds):
+            response = self.client.post(reverse("club:admin_pin"), {"pin": "1234"})
+        self.assertEqual(response.status_code, 302)
+
+    def get_at(self, seconds, name="club:member_add"):
+        with self.at(seconds):
+            return self.client.get(reverse(name))
+
+    def test_admin_page_works_inside_the_idle_window(self):
+        self.enter_admin_at(0)
+
+        self.assertEqual(self.get_at(90).status_code, 200)
+
+    def test_idle_past_the_limit_redirects_an_admin_page_to_the_pin(self):
+        self.enter_admin_at(0)
+
+        response = self.get_at(101)
+
+        query = urlencode({"next": reverse("club:member_add")})
+        self.assertRedirects(
+            response,
+            reverse("club:admin_pin") + "?" + query,
+            fetch_redirect_response=False,
+        )
+
+    def test_idle_expiry_removes_the_flag_and_both_timestamps(self):
+        self.enter_admin_at(0)
+
+        self.get_at(101, "club:home")
+
+        session = self.client.session
+        for key in (
+            "is_club_admin",
+            "club_admin_started_at",
+            "club_admin_last_used_at",
+        ):
+            self.assertNotIn(key, session)
+
+    def test_idle_expiry_makes_a_post_to_an_admin_route_a_403(self):
+        self.enter_admin_at(0)
+
+        with self.at(101):
+            response = self.client.post(reverse("club:member_add"), {"name": "Bo"})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Member.objects.filter(name="Bo").exists())
+
+    def test_admin_links_disappear_once_expired(self):
+        self.enter_admin_at(0)
+        self.assertContains(self.get_at(50, "club:home"), reverse("club:admin_exit"))
+
+        response = self.get_at(200, "club:home")
+
+        self.assertNotContains(response, reverse("club:admin_exit"))
+        self.assertIs(response.context["is_club_admin"], False)
+
+    def test_activity_extends_the_idle_window(self):
+        self.enter_admin_at(0)
+        self.get_at(80, "club:home")
+        self.get_at(160, "club:home")
+
+        # 240 is far past 100 from the start, but only 80 after the last use.
+        self.assertEqual(self.get_at(240).status_code, 200)
+
+    def test_a_page_that_merely_shows_admin_links_counts_as_activity(self):
+        self.enter_admin_at(0)
+        self.get_at(90, "club:home")
+
+        self.assertEqual(self.get_at(170).status_code, 200)
+
+    def test_max_age_ends_admin_mode_despite_continuous_activity(self):
+        self.enter_admin_at(0)
+        for seconds in range(90, 1000, 90):
+            self.assertEqual(self.get_at(seconds).status_code, 200)
+
+        # Last use was at 900; 1010 is within idle range but past the max age.
+        response = self.get_at(1010)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn("is_club_admin", self.client.session)
+
+    def test_expiry_leaves_the_identified_member_in_place(self):
+        session = self.client.session
+        session["member_id"] = self.ada.pk
+        session.save()
+        self.enter_admin_at(0)
+
+        response = self.get_at(101, "club:home")
+
+        self.assertEqual(self.client.session["member_id"], self.ada.pk)
+        self.assertEqual(response.context["current_member"], self.ada)
+
+    def test_a_flag_without_timestamps_is_treated_as_expired(self):
+        session = self.client.session
+        session["is_club_admin"] = True
+        session.save()
+
+        response = self.client.get(reverse("club:member_add"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn("is_club_admin", self.client.session)
+
+    def test_a_flag_without_timestamps_cannot_post(self):
+        session = self.client.session
+        session["is_club_admin"] = True
+        session.save()
+
+        response = self.client.post(reverse("club:member_add"), {"name": "Bo"})
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_expiry_adds_no_message(self):
+        self.enter_admin_at(0)
+        self.client.get(reverse("club:home"))  # drain the "Admin mode is on." message
+
+        response = self.get_at(101, "club:home")
+
+        self.assertEqual(list(response.context["messages"]), [])
+
+    def test_exit_removes_the_flag_and_both_timestamps(self):
+        self.enter_admin_at(0)
+
+        with self.at(10):
+            self.client.post(reverse("club:admin_exit"))
+
+        session = self.client.session
+        self.assertNotIn("is_club_admin", session)
+        self.assertNotIn("club_admin_started_at", session)
+        self.assertNotIn("club_admin_last_used_at", session)
+
+    def test_correct_pin_stores_both_timestamps(self):
+        self.enter_admin_at(7)
+
+        session = self.client.session
+        self.assertIn("club_admin_started_at", session)
+        self.assertEqual(
+            session["club_admin_started_at"], session["club_admin_last_used_at"]
+        )
+
+
+@override_settings(CLUB_ADMIN_PIN="1234")
+class SessionKeyRotationTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+
+    def identified_session_key(self):
+        session = self.client.session
+        session["member_id"] = self.ada.pk
+        session.save()
+        return session.session_key
+
+    def test_correct_pin_changes_the_session_key_and_keeps_the_member(self):
+        before = self.identified_session_key()
+
+        self.client.post(reverse("club:admin_pin"), {"pin": "1234"})
+
+        after = self.client.session.session_key
+        self.assertNotEqual(before, after)
+        self.assertEqual(self.client.session["member_id"], self.ada.pk)
+
+    def test_wrong_pin_does_not_rotate_the_session_key(self):
+        before = self.identified_session_key()
+
+        self.client.post(reverse("club:admin_pin"), {"pin": "9999"})
+
+        self.assertEqual(self.client.session.session_key, before)

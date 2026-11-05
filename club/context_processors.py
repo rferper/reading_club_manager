@@ -1,4 +1,5 @@
 from .identity import current_member as resolve_current_member
+from .identity import is_admin
 
 
 def is_club_admin(request):
@@ -8,8 +9,7 @@ def is_club_admin(request):
     worrying about an absent key. It decides what the header shows; it never
     decides what a view allows — that is `club_admin_required`.
     """
-    session = getattr(request, "session", None)
-    return {"is_club_admin": bool(session and session.get("is_club_admin"))}
+    return {"is_club_admin": is_admin(request)}
 
 
 def current_member(request):

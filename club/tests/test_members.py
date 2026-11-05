@@ -10,6 +10,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import formats, timezone
 
+from .helpers import enter_admin
 from ..models import Member
 
 
@@ -222,7 +223,7 @@ class MemberListTests(TestCase):
 
     def test_an_admin_sees_them(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
         response = self.client.get(reverse("club:member_list"))
@@ -301,7 +302,7 @@ class RosterGateTests(TestCase):
         """`require_POST` is outermost, so nothing that changes the roster can
         hide behind a link somebody follows by accident."""
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
         response = self.client.get(reverse("club:member_toggle", args=[self.ada.pk]))
@@ -320,7 +321,7 @@ class RosterAdminTests(TestCase):
 
     def setUp(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
     def test_the_add_and_edit_pages_render_a_labelled_form(self):
@@ -419,7 +420,7 @@ class RosterDuplicateNameTests(TestCase):
 
     def setUp(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
     def test_an_exact_duplicate_is_a_field_error(self):

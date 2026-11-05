@@ -3,6 +3,7 @@
 from django.test import TestCase
 from django.urls import reverse
 
+from .helpers import enter_admin
 from ..models import Book, Member, Question
 
 
@@ -89,7 +90,7 @@ class QuestionsPageTests(TestCase):
 
     def test_an_admin_sees_them(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
         response = self.client.get(reverse("club:questions"))
@@ -213,7 +214,7 @@ class QuestionAdminActionsTests(TestCase):
 
     def setUp(self):
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
     def test_an_admin_can_post_a_question(self):
@@ -321,7 +322,7 @@ class QuestionDeleteTests(TestCase):
         )
         self.url = reverse("club:question_delete", args=[self.question.pk])
         session = self.client.session
-        session["is_club_admin"] = True
+        enter_admin(session)
         session.save()
 
     def test_the_confirmation_warns_that_the_answers_go_too(self):
