@@ -1275,3 +1275,28 @@ exactly one query to `/questions/` and to `/history/<pk>/` however many exist (#
 do to replies is #59). A reply is not hidden from a reader behind on progress (#48). Replying
 returns to `/questions/` with no scroll position kept. Replies are not in the home page's
 "Since you last looked" panel (#40), and have no reactions (#57, #58).
+
+
+## 44. Archive year filter: a book belongs to the year it finished; undated books belong to none
+
+**Issue:** #36.
+
+**Rule.** `/history/?year=YYYY` keeps the non-current books whose `finished_on` falls in that
+calendar year. A book with no `finished_on` belongs to no year, so it shows only when no year
+is chosen (still with its "no finish date recorded" wording, #22). There is no "no finish
+date" choice in the select; file an issue if undated books become common.
+
+**Which years filter.** The select offers one option per distinct year of `finished_on` over
+non-current books that have one, newest first, read in one query (`.dates(...)`). Only a
+`year` equal to an offered year filters; blank, non-numeric, signed, decimal, spaced, huge or
+unlisted values are ignored, as junk `chapter` is (#35), and the full list shows. Repeated
+`year=` uses the last. The offered years are not narrowed by `q` or by the chosen year, so
+the choices do not move under the member, and the current read never contributes a year.
+
+**With `q`.** `year` and `q` combine with AND (#29) in the one GET form. The result line and
+the no-match empty state are built from whichever filters are active; an ignored year does
+not count as active.
+
+**Cost.** The years add one query, so the page is two queries whatever the number of books
+or years (#19, #23), pinned in `test_history.py`. The earlier one-query pins in
+`test_history.py` and `test_ratings.py` were raised to two.

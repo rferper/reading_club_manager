@@ -15,13 +15,20 @@
   <form method="get" action="{% url 'club:history' %}">
     <label for="history-q">Search by title or author</label>
     <input type="search" id="history-q" name="q" value="{{ query }}" maxlength="200">
+    <label for="history-year">Year</label>
+    <select id="history-year" name="year">
+      <option value="">All years</option>
+      {% for y in years %}
+        <option value="{{ y }}"{% if y == year %} selected{% endif %}>{{ y }}</option>
+      {% endfor %}
+    </select>
     <button type="submit">Search</button>
   </form>
 
-  {% if query %}
+  {% if query or year %}
     <p>
-      {{ match_count }} book{{ match_count|pluralize }} match{{ match_count|pluralize:"es," }}
-      '{{ query }}' &middot;
+      {{ match_count }} book{{ match_count|pluralize }}{% if year %} finished in {{ year|stringformat:"d" }}{% endif %}{% if query %} match{{ match_count|pluralize:"es," }} '{{ query }}'{% endif %}
+      &middot;
       <a href="{% url 'club:history' %}">Show all books</a>
     </p>
   {% endif %}
@@ -55,9 +62,9 @@
       {% endif %}
     </div>
   {% empty %}
-    {% if query %}
+    {% if query or year %}
       <p class="empty">
-        No book matches '{{ query }}'.
+        No book {% if year %}finished in {{ year|stringformat:"d" }} {% endif %}matches{% if query %} '{{ query }}'{% endif %}.
         {% if archive_has_books %}
           The archive has other books &mdash;
           <a href="{% url 'club:history' %}">show all books</a>.

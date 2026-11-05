@@ -1159,8 +1159,22 @@ def history(request):
 
     `?q=` narrows it (decision 29): every word must appear, ignoring case, in
     the title or the author. A blank `q` is no search at all.
+
+    `?year=` narrows it to the calendar year of `finished_on` (decision 44),
+    ANDed with `q`. Only a year the page offers filters; anything else is
+    ignored, so no raw input ever reaches `int()`.
     """
     query = request.GET.get("q", "").strip()[:HISTORY_QUERY_MAX]
+    # One query, derived from the data and deliberately not narrowed by `q` or
+    # the chosen year, so the choices stay put under the member's hands.
+    years = [
+        d.year
+        for d in Book.objects.filter(
+            is_current=False, finished_on__isnull=False
+        ).dates("finished_on", "year", order="DESC")
+    ]
+    raw_year = request.GET.get("year", "")
+    year = next((y for y in years if str(y) == raw_year), None)
     books = (
         Book.objects.filter(is_current=False)
         .annotate(
@@ -1183,6 +1197,8 @@ def history(request):
     # rating aggregates above are not inflated. `icontains` escapes `%` and `_`.
     for word in query.split():
         books = books.filter(Q(title__icontains=word) | Q(author__icontains=word))
+    if year is not None:
+        books = books.filter(finished_on__year=year)
 
     books = list(books)
 
@@ -1192,7 +1208,9 @@ def history(request):
         {
             "books": books,
             "query": query,
-            "match_count": len(books) if query else None,
+            "years": years,
+            "year": year,
+            "match_count": len(books) if query or year is not None else None,
             "archive_has_books": bool(books)
             or Book.objects.filter(is_current=False).exists(),
         },

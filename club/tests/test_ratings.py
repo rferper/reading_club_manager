@@ -463,7 +463,7 @@ class RatingsOnTheArchiveTests(TestCase):
             )
             MemberRating.objects.create(book=other, member=self.ada, score=3)
 
-        with self.assertNumQueries(1):
+        with self.assertNumQueries(2):
             response = self.client.get(reverse("club:history"))
 
         self.assertEqual(len(response.context["books"]), 11)
