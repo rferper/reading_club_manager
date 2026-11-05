@@ -350,3 +350,36 @@ class QuestionDeleteTests(TestCase):
         response = self.client.post(reverse("club:question_delete", args=[9999]))
 
         self.assertEqual(response.status_code, 404)
+
+
+class EmptyQuestionPostTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.book = Book.objects.create(
+            title="Middlemarch", author="George Eliot", is_current=True
+        )
+        cls.question = Question.objects.create(book=cls.book, text="Why?", position=1)
+
+    def setUp(self):
+        session = self.client.session
+        enter_admin(session)
+        session.save()
+
+    def test_question_add_empty_post_shows_errors_and_adds_nothing(self):
+        response = self.client.post(reverse("club:question_add"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].is_bound)
+        self.assertFormError(response.context["form"], "text", "A question needs something in it.")
+        self.assertEqual(Question.objects.count(), 1)
+
+    def test_question_edit_empty_post_shows_errors_and_changes_nothing(self):
+        response = self.client.post(
+            reverse("club:question_edit", args=[self.question.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].is_bound)
+        self.assertFormError(response.context["form"], "text", "A question needs something in it.")
+        self.question.refresh_from_db()
+        self.assertEqual(self.question.text, "Why?")

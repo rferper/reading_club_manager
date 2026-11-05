@@ -1192,3 +1192,22 @@ class MinutesAdminTests(TestCase):
         response = self.client.get(reverse("admin:club_book_changelist"))
 
         self.assertContains(response, "12h 30m")
+
+
+class EmptyProgressPostTests(TestCase):
+    def test_an_empty_post_is_validated_and_records_nothing(self):
+        ada = Member.objects.create(name="Ada")
+        Book.objects.create(
+            title="Middlemarch", author="George Eliot", total_pages=800, is_current=True
+        )
+        session = self.client.session
+        session["member_id"] = ada.pk
+        session.save()
+
+        response = self.client.post(reverse("club:progress_update"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].is_bound)
+        self.assertFormError(response.context["form"], "pages_read", "This field is required.")
+        self.assertEqual(Progress.objects.count(), 0)
+        self.assertEqual(ProgressEntry.objects.count(), 0)

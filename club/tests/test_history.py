@@ -1078,3 +1078,26 @@ class ArchiveInMinutesTests(TestCase):
 
         self.assertContains(response, "12h 30m")
         self.assertNotContains(response, "750")
+
+
+class EmptyFinishPostTests(TestCase):
+    def test_an_empty_post_is_validated_and_finishes_nothing(self):
+        book = Book.objects.create(
+            title="Middlemarch", author="George Eliot", is_current=True
+        )
+        session = self.client.session
+        enter_admin(session)
+        session.save()
+
+        response = self.client.post(reverse("club:book_finish", args=[book.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].is_bound)
+        self.assertFormError(
+            response.context["form"],
+            "finished_on",
+            "A finished book needs the date it was finished.",
+        )
+        book.refresh_from_db()
+        self.assertTrue(book.is_current)
+        self.assertIsNone(book.finished_on)

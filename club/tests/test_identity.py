@@ -336,3 +336,15 @@ class IdentityIsSeparateFromAdminTests(TestCase):
         self.client.post(reverse("club:forget_me"))
 
         self.assertIs(self.client.session["is_club_admin"], True)
+
+
+class EmptyIdentifyPostTests(TestCase):
+    def test_an_empty_post_is_validated_and_identifies_nobody(self):
+        Member.objects.create(name="Ada")
+
+        response = self.client.post(reverse("club:identify"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].is_bound)
+        self.assertFormError(response.context["form"], "member", "This field is required.")
+        self.assertNotIn("member_id", self.client.session)
