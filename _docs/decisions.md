@@ -900,3 +900,34 @@ there is no 500.
 **Admin-only, re-checked in the view; a current or unknown book is a 404.** A GET only
 renders the confirmation page; the change is a POST with CSRF and a redirect home
 (decisions #14 and #16). The "Reopen" link on the archive page is cosmetic.
+
+## 31. "Since you last looked" is in-site only, with a per-member marker and a null baseline
+
+Settled while building the home page panel (#22).
+
+**In-site only.** The panel is the whole feature. Email needs a mail backend, stored
+addresses and an unsubscribe story, so it is #41; notes and replies in the panel are #40.
+
+**One marker per member: `Member.notifications_seen_at`.** A nullable datetime. There is
+no per-item read state, no badge and no history; the marker moves forward for everything
+at once. It is a convenience, not a boundary (decisions #4 and #5): anyone may pick
+anyone, so anyone may clear anyone's panel.
+
+**Null means "since the start of `joined_on`".** A member who has never pressed the button
+sees everything on the current book created after midnight (local time) of the day they
+joined. Existing members therefore see the current book's discussion once, until they
+mark it seen.
+
+**What counts, all on the current book only:** each question created after the marker; a
+count of answers by other members created after it; and "A new book started" when
+`Book.created_on` is after it. A member's own answers never count, and answers are
+compared on `created_on`, not `updated_on`, so an edit does not bring one back.
+`Book.created_on` is new because the date fields are optional and carry no time; the
+migration backfills existing books from `started_on` (midnight) or the migration time.
+The dev seed sets it explicitly, since a raw fixture load skips `auto_now_add`.
+
+**GETs never stamp.** Only `POST /seen/` writes the marker, then redirects home (decision
+#16). GET is 405. With nobody identified the POST changes nothing and still redirects
+rather than 403, because the caller wanted the panel gone and there is nothing to stamp.
+An empty panel is not rendered at all; a deactivated member is unidentified (decision #3)
+and sees none.
