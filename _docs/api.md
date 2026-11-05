@@ -24,9 +24,10 @@ route that is not here.
 
 | Path | Name | Methods | Access | Purpose | Issue | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| `/` | `home` | GET | Public | Current book, author, dates; links out to everything else | #1, #8 | Built |
+| `/` | `home` | GET | Public | Current book, author, dates; links out to everything else; for an identified member, a "Since you last looked" panel of new questions, other members' new answers and a newly started book (decision #31) | #1, #8 | Built |
 | `/who-are-you/` | `identify` | GET, POST | Public | Pick your name; stores it in the session | #6 | Built |
 | `/who-are-you/forget/` | `forget_me` | POST | Public | Clear the session identity | #6 | Built |
+| `/seen/` | `mark_seen` | POST | Public | Stamp the viewer's `notifications_seen_at` with now so the home page's "Since you last looked" panel clears, then redirect to `/`. GET is 405. With nobody identified it changes nothing and still redirects. No other route ever writes the marker | #22 | Built |
 | `/admin-pin/` | `admin_pin` | GET, POST | Public | Enter the PIN; sets the admin session flag | #4 | Built |
 | `/admin-pin/exit/` | `admin_exit` | POST | Admin | Leave admin mode | #4 | Built |
 | `/members/` | `member_list` | GET | Public | The roster, with roles and active state | #5 | Built |

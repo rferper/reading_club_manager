@@ -3,6 +3,33 @@
 {% block title %}{% if book %}{{ book.title }} — {% endif %}Reading Club Manager{% endblock %}
 
 {% block content %}
+  {% if whats_new %}
+    <section class="panel whats-new" aria-labelledby="whats-new-heading">
+      <h2 id="whats-new-heading">Since you last looked</h2>
+      <ul>
+        {% if whats_new.new_book %}
+          <li>A new book started: {{ whats_new.new_book.title }}</li>
+        {% endif %}
+        {% for question in whats_new.questions %}
+          <li>
+            New question:
+            <a href="{% url 'club:questions' %}">{{ question.text|truncatechars:120 }}</a>
+          </li>
+        {% endfor %}
+        {% if whats_new.answer_count %}
+          <li>
+            <a href="{% url 'club:questions' %}">{{ whats_new.answer_count }} new answer{{ whats_new.answer_count|pluralize }}</a>
+            from other members
+          </li>
+        {% endif %}
+      </ul>
+      <form method="post" action="{% url 'club:mark_seen' %}">
+        {% csrf_token %}
+        <button type="submit">Mark as seen</button>
+      </form>
+    </section>
+  {% endif %}
+
   {% if book %}
     <h1>We are reading</h1>
 

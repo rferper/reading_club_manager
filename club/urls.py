@@ -6,6 +6,7 @@ app_name = "club"
 
 urlpatterns = [
     path("", views.home, name="home"),
+    path("seen/", views.mark_seen, name="mark_seen"),
     path("admin-pin/", views.admin_pin, name="admin_pin"),
     path("admin-pin/exit/", views.admin_exit, name="admin_exit"),
     path("who-are-you/", views.identify, name="identify"),
