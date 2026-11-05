@@ -23,6 +23,7 @@ is a new module and nothing else. What is there now:
 | `test_reactions.py` | the `Reaction` model, the Agree toggle and its refusals, the count and the notes page query pin |
 | `test_questions.py` | the `Question` model, its order, the admin-only controls |
 | `test_answers.py` | the `Answer` model, its one-per-member rule, the answer forms |
+| `test_answer_replies.py` | the `AnswerReply` model, posting a reply to an answer, who may remove one, the archive view, the query pins |
 | `test_history.py` | finishing a book, the archive, and what survives the move |
 | `test_chapters.py` | chapter anchors on notes and questions, the label, and the `?chapter=` filter |
 | `test_whats_new.py` | the home page's "Since you last looked" panel and the Mark as seen POST |
