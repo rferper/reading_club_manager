@@ -24,6 +24,7 @@ from .forms import (
     MemberForm,
     MemberRatingForm,
     NoteForm,
+    ReplyForm,
     ProgressForm,
     QuestionForm,
 )
@@ -452,7 +453,22 @@ def notes(request):
     return _render_notes(request, NoteForm())
 
 
-def _render_notes(request, form):
+def _top_level_notes(book):
+    """A book's top-level notes, newest first, each with its replies loaded.
+
+    Replies are prefetched oldest first — a conversation reads downward — with
+    their authors, so the query count does not grow with the thread (decision
+    #19). A reply is never a top-level row, so it is never listed twice.
+    """
+    return book.notes.filter(parent__isnull=True).select_related("author").prefetch_related(
+        Prefetch(
+            "replies",
+            queryset=Note.objects.select_related("author").order_by("created_on", "pk"),
+        )
+    )
+
+
+def _render_notes(request, form, reply_form=None):
     book = Book.objects.current()
     viewer = current_member(request)
     is_admin = bool(request.session.get("is_club_admin"))
@@ -460,15 +476,51 @@ def _render_notes(request, form):
     # Each note is paired with whether this viewer may remove it, asked of the
     # model rather than re-derived in the template. The button is decoration
     # either way — `note_delete` asks the same question again.
-    rows = [
-        {"note": note, "may_remove": note.may_be_removed_by(viewer, is_admin)}
-        for note in (book.notes.select_related("author") if book else [])
-    ]
+    rows = []
+    for note in _top_level_notes(book) if book else []:
+        replies = list(note.replies.all())
+
+        # Only the form that was submitted comes back bound, so an error shows
+        # under the note it belongs to and the others stay empty.
+        if (
+            reply_form is not None
+            and reply_form.is_bound
+            and reply_form.data.get("parent") == str(note.pk)
+        ):
+            note_reply_form = reply_form
+        else:
+            note_reply_form = ReplyForm(initial={"parent": note.pk})
+
+        # One set of element ids per note, so every label points at its own box.
+        note_reply_form.auto_id = f"reply_{note.pk}_%s"
+
+        rows.append(
+            {
+                "note": note,
+                "may_remove": note.may_be_removed_by(viewer, is_admin),
+                "reply_count": len(replies),
+                "replies": [
+                    {"note": r, "may_remove": r.may_be_removed_by(viewer, is_admin)}
+                    for r in replies
+                ],
+                "reply_form": note_reply_form,
+            }
+        )
+
+    # A reply aimed at nothing valid has no note to show its error under.
+    reply_target_error = (
+        reply_form.errors.get("parent") if reply_form is not None else None
+    )
 
     return render(
         request,
         "club/notes.html",
-        {"book": book, "rows": rows, "form": form},
+        {
+            "book": book,
+            "rows": rows,
+            "form": form,
+            "reply_target_error": reply_target_error,
+        },
     )
 
 
@@ -486,6 +538,10 @@ def _post_note(request):
         messages.error(request, "There is no current book to write about.")
         return redirect("club:home")
 
+    # A reply names its note in a hidden `parent`; a plain note has no such key.
+    if "parent" in request.POST:
+        return _post_reply(request, book)
+
     form = NoteForm(request.POST)
 
     if not form.is_valid():
@@ -497,6 +553,22 @@ def _post_note(request):
     note.save()
 
     messages.success(request, "Note posted.")
+    return redirect("club:notes")
+
+
+def _post_reply(request, book):
+    """Save a reply to a top-level note on the current book (decision #28)."""
+    form = ReplyForm(request.POST, book=book)
+
+    if not form.is_valid():
+        return _render_notes(request, NoteForm(), form)
+
+    reply = form.save(commit=False)
+    reply.book = form.cleaned_data["parent"].book
+    reply.author = current_member(request)
+    reply.save()
+
+    messages.success(request, "Reply posted.")
     return redirect("club:notes")
 
 
@@ -514,8 +586,15 @@ def note_delete(request, pk):
     ):
         raise PermissionDenied("A note is removed by the member who wrote it.")
 
+    # Counted before the delete: a top-level note takes its replies with it.
+    reply_count = note.replies.count()
     note.delete()
-    messages.success(request, "Note removed.")
+
+    if reply_count:
+        noun = "reply" if reply_count == 1 else "replies"
+        messages.success(request, f"Note removed, and {reply_count} {noun} with it.")
+    else:
+        messages.success(request, "Note removed.")
     return redirect("club:notes")
 
 
@@ -729,7 +808,7 @@ def history_detail(request, pk):
         "club/history_detail.html",
         {
             "book": book,
-            "notes": book.notes.select_related("author"),
+            "notes": _top_level_notes(book),
             "questions": book.questions.prefetch_related(
                 Prefetch("answers", queryset=Answer.objects.select_related("member"))
             ),

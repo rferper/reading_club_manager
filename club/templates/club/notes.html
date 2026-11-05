@@ -26,6 +26,10 @@
       </p>
     {% endif %}
 
+    {% if reply_target_error %}
+      <ul class="errorlist">{% for error in reply_target_error %}<li>{{ error }}</li>{% endfor %}</ul>
+    {% endif %}
+
     {% for row in rows %}
       <div class="panel note">
         {% comment %}
@@ -40,11 +44,36 @@
           {% if row.may_remove %}
             <form method="post" action="{% url 'club:note_delete' row.note.pk %}">
               {% csrf_token %}
-              <button type="submit">Remove</button>
+              <button type="submit">Remove{% if row.reply_count %} (also removes {{ row.reply_count }} repl{{ row.reply_count|pluralize:"y,ies" }}){% endif %}</button>
             </form>
           {% endif %}
         </div>
       </div>
+
+      {% for reply in row.replies %}
+        <div class="panel note reply">
+          {{ reply.note.body|linebreaks }}
+
+          <div class="byline note__byline">
+            <span>{{ reply.note.author.name }} · {{ reply.note.created_on }}</span>
+
+            {% if reply.may_remove %}
+              <form method="post" action="{% url 'club:note_delete' reply.note.pk %}">
+                {% csrf_token %}
+                <button type="submit">Remove</button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+
+      {% if current_member %}
+        <form method="post" class="reply-form">
+          {% csrf_token %}
+          {{ row.reply_form.as_p }}
+          <button type="submit">Reply</button>
+        </form>
+      {% endif %}
     {% empty %}
       <p class="empty">
         No notes on {{ book.title }} yet — the first one can be yours.

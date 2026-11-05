@@ -77,6 +77,14 @@ class SeedFixtureTests(TestCase):
         self.assertTrue(Note.objects.filter(book=finished).exists())
         self.assertTrue(Answer.objects.filter(question__book=finished).exists())
 
+    def test_there_are_replies_on_the_current_and_an_archived_book(self):
+        replies = Note.objects.filter(parent__isnull=False)
+
+        self.assertTrue(replies.filter(book__is_current=True).exists())
+        self.assertTrue(replies.filter(book__is_current=False).exists())
+        for reply in replies:
+            reply.full_clean()
+
     def test_a_note_spans_more_than_one_paragraph(self):
         """So a newcomer sees that line breaks survive, without typing one."""
         self.assertTrue(

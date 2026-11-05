@@ -99,6 +99,12 @@
       {{ note.body|linebreaks }}
       <p class="byline">{{ note.author.name }} · {{ note.created_on }}</p>
     </div>
+    {% for reply in note.replies.all %}
+      <div class="panel note reply">
+        {{ reply.body|linebreaks }}
+        <p class="byline">{{ reply.author.name }} · {{ reply.created_on }}</p>
+      </div>
+    {% endfor %}
   {% empty %}
     <p class="empty">No notes were written on this one.</p>
   {% endfor %}

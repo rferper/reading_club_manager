@@ -302,6 +302,39 @@
   }
 },
 {
+  "model": "club.note",
+  "pk": 7,
+  "fields": {
+    "book": 1,
+    "author": 1,
+    "parent": 1,
+    "body": "Patiently is exactly the word. The house never hurries and neither does the prose.",
+    "created_on": "2026-05-20T08:15:00Z"
+  }
+},
+{
+  "model": "club.note",
+  "pk": 8,
+  "fields": {
+    "book": 2,
+    "author": 3,
+    "parent": 4,
+    "body": "Chapter 20 is where I stopped skimming. I read it twice.",
+    "created_on": "2026-08-04T21:30:00Z"
+  }
+},
+{
+  "model": "club.note",
+  "pk": 9,
+  "fields": {
+    "book": 2,
+    "author": 1,
+    "parent": 4,
+    "body": "Twice is the right number.",
+    "created_on": "2026-08-05T07:45:00Z"
+  }
+},
+{
   "model": "club.question",
   "pk": 1,
   "fields": {
