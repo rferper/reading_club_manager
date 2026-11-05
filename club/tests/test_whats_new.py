@@ -271,6 +271,29 @@ class NotesInPanelTests(TestCase):
 
         self.assertNotContains(self.home(), PANEL)
 
+    def test_marker_is_strict_for_notes_and_replies(self):
+        instant = timezone.now().replace(microsecond=0) - timedelta(minutes=5)
+        Member.objects.filter(pk=self.ada.pk).update(notifications_seen_at=instant)
+        top = self.note(author=self.ada, minutes_ago=60)
+        tie_note = self.note()
+        tie_reply = self.note(parent=top)
+        Note.objects.filter(pk__in=[tie_note.pk, tie_reply.pk]).update(
+            created_on=instant
+        )
+
+        self.assertNotContains(self.home(), PANEL)
+
+        Note.objects.filter(pk=tie_note.pk).update(
+            created_on=instant + timedelta(seconds=1)
+        )
+        self.assertContains(self.home(), "1 new note")
+        self.assertNotContains(self.home(), "new reply")
+
+        Note.objects.filter(pk=tie_reply.pk).update(
+            created_on=instant + timedelta(seconds=1)
+        )
+        self.assertContains(self.home(), "1 new reply")
+
     def test_note_on_a_finished_book_is_not_counted(self):
         old = Book.objects.create(title="Old", author="X")
         self.note(book=old)
