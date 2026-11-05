@@ -543,6 +543,11 @@ class Note(models.Model):
     )
 
     body = models.TextField()
+    # Optional chapter this is about; null means not anchored. A label the
+    # author chose, never checked against their own progress (decision #35).
+    chapter = models.PositiveIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1)]
+    )
     created_on = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -597,6 +602,11 @@ class Question(models.Model):
     text = models.TextField()
     position = models.PositiveIntegerField(
         default=1, help_text="Lower numbers come first. Ties fall back to age."
+    )
+    # Optional chapter this is about; null means not anchored. A label the
+    # author chose, never checked against their own progress (decision #35).
+    chapter = models.PositiveIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1)]
     )
     created_on = models.DateTimeField(auto_now_add=True)
 
