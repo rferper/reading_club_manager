@@ -598,3 +598,29 @@ class BookMinutesFormTests(TestCase):
         self.assertEqual(
             response.context["form"]["total_minutes"].value(), "4h 12m"
         )
+
+
+class EmptyBookPostTests(TestCase):
+    def setUp(self):
+        session = self.client.session
+        enter_admin(session)
+        session.save()
+
+    def test_book_start_empty_post_shows_errors_and_starts_nothing(self):
+        response = self.client.post(reverse("club:book_start"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].is_bound)
+        self.assertFormError(response.context["form"], "title", "This field is required.")
+        self.assertEqual(Book.objects.count(), 0)
+
+    def test_book_edit_empty_post_shows_errors_and_changes_nothing(self):
+        book = Book.objects.create(title="Middlemarch", author="George Eliot")
+
+        response = self.client.post(reverse("club:book_edit", args=[book.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].is_bound)
+        self.assertFormError(response.context["form"], "title", "This field is required.")
+        book.refresh_from_db()
+        self.assertEqual(book.title, "Middlemarch")

@@ -463,3 +463,33 @@ class RosterDuplicateNameTests(TestCase):
         self.assertEqual(response.status_code, 200)
         bob.refresh_from_db()
         self.assertEqual(bob.name, "Bob")
+
+
+class EmptyPostTests(TestCase):
+    """An empty POST is validated, not shown as a fresh form (#28)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+
+    def setUp(self):
+        session = self.client.session
+        enter_admin(session)
+        session.save()
+
+    def test_member_add_empty_post_shows_errors_and_adds_nobody(self):
+        response = self.client.post(reverse("club:member_add"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].is_bound)
+        self.assertFormError(response.context["form"], "name", "This field is required.")
+        self.assertEqual(Member.objects.count(), 1)
+
+    def test_member_edit_empty_post_shows_errors_and_renames_nobody(self):
+        response = self.client.post(reverse("club:member_edit", args=[self.ada.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].is_bound)
+        self.assertFormError(response.context["form"], "name", "This field is required.")
+        self.ada.refresh_from_db()
+        self.assertEqual(self.ada.name, "Ada")

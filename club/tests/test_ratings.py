@@ -583,3 +583,28 @@ class InlineRatingFormTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "A rating runs from 1 to 5.")
         self.assertContains(response, "<form")
+
+
+class EmptyRatingPostTests(TestCase):
+    """A POST with no body is still a submission (#28), not a GET."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.book = Book.objects.create(
+            title="Piranesi", author="Susanna Clarke", finished_on=date(2025, 6, 1)
+        )
+
+    def test_an_empty_post_is_bound_and_asks_for_a_score(self):
+        session = self.client.session
+        session["member_id"] = self.ada.pk
+        session.save()
+
+        response = self.client.post(reverse("club:book_rate", args=[self.book.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].is_bound)
+        self.assertFormError(response.context["form"], "score", "This field is required.")
+        self.assertContains(response, "This field is required.")
+        self.assertEqual(MemberRating.objects.count(), 0)
+        self.assertEqual(list(response.context["messages"]), [])
