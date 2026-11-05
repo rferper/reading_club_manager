@@ -1032,3 +1032,36 @@ any direct admin edit, that moves the current value without a dot on the trail
 
 Out: ebook locations as a fourth measure, left to #47; converting a row between
 measures, left to #29 and #30; seconds, playback speed and per-chapter timestamps.
+
+## 35. Chapter anchors are an optional label, not a gate
+
+Settled while building #26.
+
+**One nullable number.** `Note.chapter` and `Question.chapter` are nullable
+`PositiveIntegerField`s; null means not anchored. The migration is additive and no
+existing row is rewritten. A chapter is only a number (decisions #24 and #25): it does
+not change `Book.measure`, and a book measured in pages or minutes accepts any positive
+chapter. If the book declares `total_chapters`, a larger chapter is refused with an
+error that states the maximum.
+
+**Whole numbers from 1.** 0, negatives, text and any decimal are refused, including
+"2.0", which Django's integer field would otherwise read as 2.
+
+**Top-level notes only.** A reply has no chapter field and stores none; it follows its
+parent (decision #28). A note's chapter cannot be edited after posting (decision #7); an
+admin may still correct it in `/admin/`. Question add and edit take the same field, and
+an admin can set, change and clear it.
+
+**The filter.** `/notes/?chapter=N` is a GET that changes nothing. It narrows the
+top-level notes to chapter N, with their replies. A missing, blank, zero, negative,
+decimal or non-integer value is ignored and shows every note. Notes without a chapter
+appear only in the unfiltered list. The "Chapter N" label on a note links to its
+filter.
+
+**A label, not a gate.** The chapter is what the author chose; it is not checked against
+their own progress and nothing is hidden from anyone. Spoiler gating is held for #48.
+
+**Admin.** `Note` and `Question` are now registered in `/admin/` with `chapter` shown.
+
+Out: filtering questions by chapter, grouping the notes page by chapter, chapters on
+answers.

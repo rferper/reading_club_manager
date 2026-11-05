@@ -29,6 +29,7 @@
     {% for row in rows %}
       <div class="panel question">
         <p class="question__text">{{ row.question.text|linebreaksbr }}</p>
+        {% if row.question.chapter %}<p class="byline">Chapter {{ row.question.chapter }}</p>{% endif %}
 
         {% if is_club_admin %}
           <div class="admin-only question__controls">

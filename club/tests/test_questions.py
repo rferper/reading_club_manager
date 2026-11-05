@@ -247,7 +247,7 @@ class QuestionAdminActionsTests(TestCase):
     def test_the_form_carries_no_book_field(self):
         response = self.client.get(reverse("club:question_add"))
 
-        self.assertEqual(list(response.context["form"].fields), ["text", "position"])
+        self.assertEqual(list(response.context["form"].fields), ["text", "position", "chapter"])
 
     def test_a_submitted_book_is_ignored(self):
         other = Book.objects.create(title="Piranesi", author="Susanna Clarke")

@@ -203,7 +203,7 @@ class PostNoteTests(TestCase):
     def test_the_form_carries_no_author_or_book_field(self):
         response = self.client.get(reverse("club:notes"))
 
-        self.assertEqual(list(response.context["form"].fields), ["body"])
+        self.assertEqual(list(response.context["form"].fields), ["body", "chapter"])
 
     def test_a_submitted_author_is_ignored(self):
         bob = Member.objects.create(name="Bob")
