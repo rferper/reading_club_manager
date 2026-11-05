@@ -586,3 +586,69 @@ class ProgressOverviewNotStartedCellTests(TestCase):
                 ada_count, ada_pct = self._cells(response, "Ada")
                 self.assertIn("50%", ada_pct)
                 self.assertIn('aria-hidden="true"', ada_pct)
+
+
+class PagesReadNullOverviewTests(TestCase):
+    """#29: a row recorded in another unit reads as not started on a page book."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.bob = Member.objects.create(name="Bob")
+        cls.cleo = Member.objects.create(name="Cleo")
+
+    def _book(self, **totals):
+        return Book.objects.create(
+            title="Middlemarch", author="George Eliot", is_current=True, **totals
+        )
+
+    def test_chapters_to_pages_reads_as_not_started(self):
+        book = self._book(total_chapters=30)
+        Progress.objects.create(book=book, member=self.ada, chapters_read=12)
+        Book.objects.filter(pk=book.pk).update(total_chapters=None, total_pages=400)
+
+        response = self.client.get(reverse("club:progress"))
+
+        ada = response.context["rows"][0]
+        self.assertIs(ada["has_recorded"], False)
+        self.assertContains(response, "not started")
+        self.assertNotContains(response, "0 of 400")
+
+    def test_minutes_to_pages_reads_as_not_started(self):
+        book = self._book(total_minutes=600)
+        Progress.objects.create(book=book, member=self.ada, minutes_read=90)
+        Book.objects.filter(pk=book.pk).update(total_minutes=None, total_pages=400)
+
+        response = self.client.get(reverse("club:progress"))
+
+        self.assertIs(response.context["rows"][0]["has_recorded"], False)
+        self.assertNotContains(response, "0 of 400")
+
+    def test_a_recorded_page_zero_reads_zero_of_the_total(self):
+        book = self._book(total_pages=400)
+        Progress.objects.create(book=book, member=self.ada, pages_read=0)
+
+        response = self.client.get(reverse("club:progress"))
+
+        self.assertIs(response.context["rows"][0]["has_recorded"], True)
+        self.assertContains(response, "0 of 400")
+
+    def test_null_pages_sort_after_a_recorded_zero(self):
+        book = self._book(total_pages=400)
+        Progress.objects.create(book=book, member=self.ada, chapters_read=5)
+        Progress.objects.create(book=book, member=self.bob, pages_read=0)
+        Progress.objects.create(book=book, member=self.cleo, pages_read=10)
+
+        response = self.client.get(reverse("club:progress"))
+        names = [row["member"].name for row in response.context["rows"]]
+
+        self.assertEqual(names, ["Cleo", "Bob", "Ada"])
+
+    def test_model_ordering_puts_null_pages_last(self):
+        book = self._book(total_pages=400)
+        Progress.objects.create(book=book, member=self.ada, chapters_read=5)
+        Progress.objects.create(book=book, member=self.bob, pages_read=0)
+
+        members = [p.member.name for p in Progress.objects.select_related("member")]
+
+        self.assertEqual(members, ["Bob", "Ada"])
