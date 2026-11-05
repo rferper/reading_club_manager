@@ -2,7 +2,9 @@
 
 from datetime import date
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -832,3 +834,203 @@ class HistoryMixesMeasuresTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Book.objects.filter(title="Both").exists())
         self.assertContains(response, "pages or in chapters")
+
+
+class HistorySearchTests(TestCase):
+    """`?q=` on the archive: every word, title or author, case ignored."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.nineteen = Book.objects.create(
+            title="Nineteen Eighty-Four",
+            author="George Orwell",
+            finished_on=date(2024, 5, 1),
+        )
+        cls.animal = Book.objects.create(
+            title="Animal Farm",
+            author="George Orwell",
+            finished_on=date(2023, 5, 1),
+        )
+        cls.dispossessed = Book.objects.create(
+            title="The Dispossessed",
+            author="Ursula K. Le Guin",
+            finished_on=date(2022, 5, 1),
+        )
+        cls.orwell_title = Book.objects.create(
+            title="Why I Write, by Orwell",
+            author="Various",
+            finished_on=date(2021, 5, 1),
+        )
+        cls.percent = Book.objects.create(
+            title="100% Wolf", author="A. Writer", finished_on=date(2020, 5, 1)
+        )
+        cls.current = Book.objects.create(
+            title="Orwell Reader", author="Orwell", is_current=True
+        )
+
+    def search(self, q):
+        return self.client.get(reverse("club:history"), {"q": q})
+
+    def test_author_match_counts(self):
+        books = self.search("orwell").context["books"]
+
+        self.assertIn(self.nineteen, books)
+        self.assertIn(self.animal, books)
+
+    def test_title_match_alone_counts(self):
+        books = self.search("orwell").context["books"]
+
+        self.assertIn(self.orwell_title, books)
+        self.assertNotIn(self.dispossessed, books)
+
+    def test_matching_ignores_case(self):
+        books = self.search("aNiMaL fArM").context["books"]
+
+        self.assertEqual(list(books), [self.animal])
+
+    def test_every_word_must_match_in_either_field_and_any_order(self):
+        books = self.search("dispossessed ursula").context["books"]
+
+        self.assertEqual(list(books), [self.dispossessed])
+
+    def test_one_unmatched_word_finds_nothing(self):
+        response = self.search("ursula zzzz")
+
+        self.assertEqual(list(response.context["books"]), [])
+        self.assertContains(response, "No book matches")
+
+    def test_blank_query_is_the_full_list_without_a_message(self):
+        full = self.client.get(reverse("club:history"))
+        blank = self.search("   ")
+
+        self.assertEqual(list(blank.context["books"]), list(full.context["books"]))
+        self.assertEqual(len(blank.context["books"]), 5)
+        self.assertNotContains(blank, "No book matches")
+        self.assertNotContains(blank, "Show all books")
+
+    def test_no_query_lists_every_non_current_book(self):
+        response = self.client.get(reverse("club:history"))
+
+        self.assertEqual(len(response.context["books"]), 5)
+
+    def test_form_is_a_labelled_get_to_the_history(self):
+        response = self.client.get(reverse("club:history"))
+
+        self.assertContains(response, 'for="history-q"')
+        self.assertContains(response, "Search by title or author")
+        self.assertContains(response, 'method="get"')
+        self.assertContains(response, 'name="q"')
+
+    def test_box_is_prefilled_with_the_trimmed_query(self):
+        response = self.search("  orwell ")
+
+        self.assertContains(response, 'value="orwell"')
+
+    def test_page_counts_the_matches(self):
+        self.assertContains(self.search("orwell"), "3 books match")
+        self.assertContains(self.search("animal"), "1 book matches")
+
+    def test_active_search_offers_the_way_back(self):
+        response = self.search("orwell")
+
+        self.assertContains(response, "Show all books")
+        self.assertContains(response, reverse("club:history"))
+
+    def test_no_results_names_the_query_and_the_other_books(self):
+        response = self.search("zzzz")
+
+        self.assertContains(response, "No book matches")
+        self.assertContains(response, "zzzz")
+        self.assertContains(response, "The archive has other books")
+        self.assertNotContains(response, "has not finished a book yet")
+
+    def test_percent_is_matched_literally(self):
+        books = self.search("%").context["books"]
+
+        self.assertEqual(list(books), [self.percent])
+
+    def test_underscore_is_matched_literally(self):
+        self.assertEqual(list(self.search("_").context["books"]), [])
+
+    def test_the_echoed_query_is_escaped(self):
+        response = self.search("<script>")
+
+        self.assertNotContains(response, "<script>")
+        self.assertContains(response, "&lt;script&gt;")
+
+    def test_current_read_never_appears(self):
+        response = self.search("reader")
+
+        self.assertEqual(list(response.context["books"]), [])
+
+    def test_undated_book_appears_with_its_wording(self):
+        Book.objects.create(title="Orwell Letters", author="Anon")
+
+        response = self.search("letters")
+
+        self.assertContains(response, "Orwell Letters")
+        self.assertContains(response, "no finish date recorded")
+
+    def test_results_keep_the_archive_order(self):
+        undated = Book.objects.create(title="Orwell Letters", author="Anon")
+
+        books = list(self.search("orwell").context["books"])
+
+        self.assertEqual(
+            books,
+            [self.nineteen, self.animal, self.orwell_title, undated],
+        )
+
+    def test_results_keep_ratings_and_the_admin_edit_link(self):
+        Book.objects.filter(pk=self.animal.pk).update(rating=4)
+        session = self.client.session
+        session["is_club_admin"] = True
+        session.save()
+
+        response = self.search("animal")
+
+        self.assertContains(response, "the club said 4 out of 5")
+        self.assertContains(
+            response, reverse("club:book_edit", args=[self.animal.pk])
+        )
+
+    def test_a_huge_query_does_not_error(self):
+        self.assertEqual(self.search("x" * 100000).status_code, 200)
+
+    def test_empty_archive_with_a_search_does_not_claim_other_books(self):
+        Book.objects.all().delete()
+
+        response = self.search("orwell")
+
+        self.assertNotContains(response, "The archive has other books")
+
+
+class HistorySearchQueryCountTests(TestCase):
+    """Decisions 19 and 23: the page's cost does not grow with the matches."""
+
+    def queries_for(self, count):
+        Book.objects.all().delete()
+        member = Member.objects.create(name=f"Ada {count}")
+        for index in range(count):
+            book = Book.objects.create(
+                title=f"Orwell {index}", author="George", finished_on=date(2020, 1, 1)
+            )
+            book.ratings.create(member=member, score=4)
+
+        with CaptureQueriesContext(connection) as captured:
+            response = self.client.get(reverse("club:history"), {"q": "orwell"})
+        self.assertEqual(len(response.context["books"]), count)
+        return len(captured)
+
+    def test_query_count_is_the_same_at_2_and_22_matches(self):
+        small = self.queries_for(2)
+        large = self.queries_for(22)
+
+        self.assertEqual(small, large)
+
+    def test_search_page_runs_a_fixed_number_of_queries(self):
+        for index in range(2):
+            Book.objects.create(title=f"Orwell {index}", author="G")
+
+        with self.assertNumQueries(1):
+            self.client.get(reverse("club:history"), {"q": "orwell"})

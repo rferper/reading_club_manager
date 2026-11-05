@@ -852,3 +852,32 @@ other reply form stays unbound.
 **Replies are not notes for counting or listing.** The notes page and the
 archive list top-level notes only, with replies prefetched beneath them in one
 query, so the page's query count does not grow with the thread (decision #19).
+
+## 29. History search: case-insensitive substring, every word, title or author
+
+Settled while building search on `/history/` (#20).
+
+**A search is `?q=` on the existing page, a GET.** It reads and changes nothing, so
+it is public like the rest of `/history/`. There is no separate results route.
+
+**Matching: split `q` on whitespace; every word must appear, ignoring case, as a
+substring of the title or of the author.** Words may match in different fields and in
+any order, so `ursula dispossessed` finds *The Dispossessed*. It is `icontains`, which
+Django escapes, so `%` and `_` match themselves and `?q=%` does not match every book.
+No ranking, no fuzziness, no accent folding ("Jose" and "Jose" with an accent stay
+different, as with member names in decision #13).
+
+**An empty search is the unfiltered list.** A blank or whitespace-only `q` is no
+search: the full archive, no "no match" message, no "Show all books" link.
+
+**The filter reads only the book's own columns,** so it adds no join and the rating
+annotations are not inflated. It sits inside the existing queryset after the explicit
+`order_by` of decision #17, so results keep that order and the query count stays fixed
+(decisions #19 and #23). The current read is excluded as always (decision #22).
+
+**`q` is trimmed and cut at 200 characters** (the length of a title or author) so an
+over-long value is a normal search, not a 500. The echoed query is autoescaped.
+
+**The two empty states differ.** "The club has not finished a book yet" shows only
+when the archive itself is empty and no search was made; a search with no results
+names the query and links back to the full list.

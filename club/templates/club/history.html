@@ -11,6 +11,20 @@
     </p>
   {% endif %}
 
+  <form method="get" action="{% url 'club:history' %}">
+    <label for="history-q">Search by title or author</label>
+    <input type="search" id="history-q" name="q" value="{{ query }}" maxlength="200">
+    <button type="submit">Search</button>
+  </form>
+
+  {% if query %}
+    <p>
+      {{ match_count }} book{{ match_count|pluralize }} match{{ match_count|pluralize:"es," }}
+      '{{ query }}' &middot;
+      <a href="{% url 'club:history' %}">Show all books</a>
+    </p>
+  {% endif %}
+
   {% for book in books %}
     <div class="panel history-entry">
       <p class="current-book__title">
@@ -40,9 +54,21 @@
       {% endif %}
     </div>
   {% empty %}
-    <p class="empty">
-      The club has not finished a book yet — the archive fills up as books are
-      finished, and nothing ever leaves it.
-    </p>
+    {% if query %}
+      <p class="empty">
+        No book matches '{{ query }}'.
+        {% if archive_has_books %}
+          The archive has other books &mdash;
+          <a href="{% url 'club:history' %}">show all books</a>.
+        {% else %}
+          The archive is empty: the club has not finished a book yet.
+        {% endif %}
+      </p>
+    {% else %}
+      <p class="empty">
+        The club has not finished a book yet — the archive fills up as books are
+        finished, and nothing ever leaves it.
+      </p>
+    {% endif %}
   {% endfor %}
 {% endblock %}
