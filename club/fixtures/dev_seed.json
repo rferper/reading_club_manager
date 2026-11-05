@@ -444,6 +444,26 @@
   }
 },
 {
+  "model": "club.answerreply",
+  "pk": 1,
+  "fields": {
+    "answer": 5,
+    "author": 1,
+    "body": "Enough for her, maybe. I am not sure it is enough for the person it is managed for.",
+    "created_on": "2026-08-17T12:00:00Z"
+  }
+},
+{
+  "model": "club.answerreply",
+  "pk": 2,
+  "fields": {
+    "answer": 5,
+    "author": 3,
+    "body": "That is the quiet cruelty of it, yes.",
+    "created_on": "2026-08-17T15:30:00Z"
+  }
+},
+{
   "model": "club.progressentry",
   "pk": 1,
   "fields": {

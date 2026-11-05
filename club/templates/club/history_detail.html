@@ -126,6 +126,13 @@
           {{ answer.body|linebreaks }}
           <p class="byline">{{ answer.member.name }} · {{ answer.created_on }}</p>
         </div>
+
+        {% for reply in answer.replies.all %}
+          <div class="answer-reply">
+            {{ reply.body|linebreaks }}
+            <p class="byline">{{ reply.author.name }} · {{ reply.created_on }}</p>
+          </div>
+        {% endfor %}
       {% empty %}
         <p class="empty">Nobody answered this one.</p>
       {% endfor %}

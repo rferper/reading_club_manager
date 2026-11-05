@@ -711,6 +711,41 @@ class Answer(models.Model):
         return (self.updated_on - self.created_on).total_seconds() > 1
 
 
+class AnswerReply(models.Model):
+    """A remark on one answer, one level deep (decision #43).
+
+    Its own model rather than a generalised `Note.parent`: an answer hangs off
+    a question, not a book, and an answer is never a reply, so the one-level
+    rule is structural and needs no `clean()`. Immutable like a note
+    (decision #7), so there is no `updated_on`. Editing the answer it answers
+    keeps the same row and so keeps its replies.
+    """
+
+    answer = models.ForeignKey(
+        Answer, on_delete=models.CASCADE, related_name="replies"
+    )
+
+    # PROTECT for the reason in decision #20.
+    author = models.ForeignKey(
+        Member, on_delete=models.PROTECT, related_name="answer_replies"
+    )
+
+    body = models.TextField()
+    created_on = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Oldest first: a conversation reads downward.
+        ordering = ["created_on", "pk"]
+        verbose_name_plural = "answer replies"
+
+    def __str__(self):
+        return f"{self.author} replying to {self.answer.member}"
+
+    def may_be_removed_by(self, member, is_admin):
+        """The author or an admin, the same rule as a note (decision #7)."""
+        return bool(is_admin or (member is not None and member.pk == self.author_id))
+
+
 class MemberRating(models.Model):
     """One member's score out of five for one book.
 

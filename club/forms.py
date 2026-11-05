@@ -1,7 +1,7 @@
 from django import forms
 
 from .duration import MinutesField, format_minutes
-from .models import Book, Member, Note, Progress, Question
+from .models import Answer, AnswerReply, Book, Member, Note, Progress, Question
 
 
 class AdminPinForm(forms.Form):
@@ -242,6 +242,39 @@ class ReplyForm(forms.ModelForm):
     class Meta:
         model = Note
         fields = ("body", "parent")
+        labels = {"body": "Your reply"}
+        widgets = {"body": forms.Textarea(attrs={"rows": 2})}
+        error_messages = {"body": {"required": "A reply needs something in it."}}
+
+
+class AnswerReplyForm(forms.ModelForm):
+    """A reply to one answer on the current book (decision #43).
+
+    `answer` is a hidden `ModelChoiceField` over answers to the current book's
+    questions (decision #21), so a missing id, junk, a deleted answer and an
+    answer on a finished book are all the same form error. The author comes
+    from the session, never from the submitter (decision #4).
+    """
+
+    answer = forms.ModelChoiceField(
+        queryset=Answer.objects.none(),
+        widget=forms.HiddenInput,
+        error_messages={
+            "required": "Choose an answer to reply to.",
+            "invalid_choice": "Choose an answer to reply to.",
+        },
+    )
+
+    def __init__(self, *args, book=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if book is not None:
+            self.fields["answer"].queryset = Answer.objects.filter(
+                question__book=book
+            )
+
+    class Meta:
+        model = AnswerReply
+        fields = ("body", "answer")
         labels = {"body": "Your reply"}
         widgets = {"body": forms.Textarea(attrs={"rows": 2})}
         error_messages = {"body": {"required": "A reply needs something in it."}}

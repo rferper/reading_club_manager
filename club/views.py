@@ -18,6 +18,7 @@ from .decorators import club_admin_required, require_member
 from .forms import (
     AdminPinForm,
     AnswerForm,
+    AnswerReplyForm,
     BookEditForm,
     BookFinishForm,
     BookForm,
@@ -40,6 +41,7 @@ from .identity import (
 from .models import (
     MEASURE_LABELS,
     Answer,
+    AnswerReply,
     Book,
     Member,
     MemberRating,
@@ -896,15 +898,33 @@ def questions(request):
     return _render_questions(request)
 
 
-def _render_questions(request, bound_form=None):
-    """Render the page, optionally with one question's form showing errors.
+def _answers_prefetch():
+    """Answers with their members, and each answer's replies with theirs.
 
-    Every question carries its own form. Exactly one of them can be bound —
-    the question just submitted — and the rest are fresh, prefilled with this
-    viewer's existing answer where there is one.
+    One nested prefetch, so replies add exactly one query to a page however
+    many exist (decision #19). Replies come oldest first from `Meta.ordering`.
+    """
+    return Prefetch(
+        "answers",
+        queryset=Answer.objects.select_related("member").prefetch_related(
+            Prefetch(
+                "replies", queryset=AnswerReply.objects.select_related("author")
+            )
+        ),
+    )
+
+
+def _render_questions(request, bound_form=None, reply_form=None):
+    """Render the page, optionally with one form showing errors.
+
+    Every question carries its own form, and every answer its own reply form.
+    At most one of all of them is bound — the one just submitted — and the
+    rest are fresh, prefilled with this viewer's existing answer where there
+    is one.
     """
     book = Book.objects.current()
     viewer = current_member(request)
+    viewer_is_admin = is_admin(request)
 
     if book is None:
         return render(request, "club/questions.html", {"book": None, "rows": []})
@@ -915,10 +935,28 @@ def _render_questions(request, bound_form=None):
     )
 
     rows = []
-    for question in open_questions.prefetch_related(
-        Prefetch("answers", queryset=Answer.objects.select_related("member"))
-    ):
+    for question in open_questions.prefetch_related(_answers_prefetch()):
         answers = list(question.answers.all())
+
+        for answer in answers:
+            if (
+                reply_form is not None
+                and reply_form.is_bound
+                and reply_form.data.get("answer") == str(answer.pk)
+            ):
+                answer.reply_form = reply_form
+            else:
+                answer.reply_form = AnswerReplyForm(initial={"answer": answer.pk})
+
+            # One set of element ids per answer, so every label finds its box.
+            answer.reply_form.auto_id = f"answer_reply_{answer.pk}_%s"
+            answer.reply_rows = [
+                {
+                    "reply": reply,
+                    "may_remove": reply.may_be_removed_by(viewer, viewer_is_admin),
+                }
+                for reply in answer.replies.all()
+            ]
         mine = next((a for a in answers if a.member_id == getattr(viewer, "pk", None)), None)
 
         if bound_form is not None and str(question.pk) == bound_question:
@@ -933,7 +971,16 @@ def _render_questions(request, bound_form=None):
             {"question": question, "answers": answers, "mine": mine, "form": form}
         )
 
-    return render(request, "club/questions.html", {"book": book, "rows": rows})
+    # A reply aimed at nothing valid has no answer to show its error under.
+    reply_target_error = (
+        reply_form.errors.get("answer") if reply_form is not None else None
+    )
+
+    return render(
+        request,
+        "club/questions.html",
+        {"book": book, "rows": rows, "reply_target_error": reply_target_error},
+    )
 
 
 @require_member
@@ -950,6 +997,12 @@ def _post_answer(request):
         messages.error(request, "There is no current book to discuss.")
         return redirect("club:home")
 
+    # A reply names its answer in an `answer` key; an answer names a `question`.
+    # Presence alone decides, so a blank or junk `answer` is a reply with a bad
+    # target and never quietly becomes an answer (decision #43).
+    if "answer" in request.POST:
+        return _post_answer_reply(request, book)
+
     form = AnswerForm(request.POST, questions=book.questions.all())
 
     if not form.is_valid():
@@ -962,6 +1015,47 @@ def _post_answer(request):
     )
 
     messages.success(request, "Answer saved.")
+    return redirect("club:questions")
+
+
+def _post_answer_reply(request, book):
+    """Save a reply to an answer on the current book (decision #43)."""
+    form = AnswerReplyForm(request.POST, book=book)
+
+    if not form.is_valid():
+        return _render_questions(request, reply_form=form)
+
+    reply = form.save(commit=False)
+    reply.author = current_member(request)
+    reply.save()
+
+    messages.success(request, "Reply posted.")
+    return redirect("club:questions")
+
+
+@require_POST
+def answer_reply_delete(request, pk):
+    """Remove a reply to an answer - its author, or an admin (decision #43).
+
+    A 403 for anyone else, unidentified included. A reply on a finished book is
+    part of the read-only record (decision #23) and is refused with a message.
+    """
+    reply = get_object_or_404(
+        AnswerReply.objects.select_related("answer__question__book"), pk=pk
+    )
+
+    if not reply.may_be_removed_by(current_member(request), is_admin(request)):
+        raise PermissionDenied("A reply is removed by the member who wrote it.")
+
+    if not reply.answer.question.book.is_current:
+        messages.error(
+            request,
+            "This book is no longer being read, so its replies can't be removed.",
+        )
+        return redirect("club:questions")
+
+    reply.delete()
+    messages.success(request, "Reply removed.")
     return redirect("club:questions")
 
 
@@ -1033,12 +1127,25 @@ def question_delete(request, pk):
     """
     question = get_object_or_404(Question, pk=pk)
 
+    reply_count = AnswerReply.objects.filter(answer__question=question).count()
+
     if request.method == "POST":
         question.delete()
-        messages.success(request, "Question removed, along with its answers.")
+        if reply_count:
+            noun = "reply" if reply_count == 1 else "replies"
+            messages.success(
+                request,
+                f"Question removed, along with its answers and {reply_count} {noun}.",
+            )
+        else:
+            messages.success(request, "Question removed, along with its answers.")
         return redirect("club:questions")
 
-    return render(request, "club/question_confirm_delete.html", {"question": question})
+    return render(
+        request,
+        "club/question_confirm_delete.html",
+        {"question": question, "reply_count": reply_count},
+    )
 
 
 HISTORY_QUERY_MAX = 200
@@ -1120,9 +1227,7 @@ def history_detail(request, pk):
         {
             "book": book,
             "notes": _top_level_notes(book),
-            "questions": book.questions.prefetch_related(
-                Prefetch("answers", queryset=Answer.objects.select_related("member"))
-            ),
+            "questions": book.questions.prefetch_related(_answers_prefetch()),
             # The book comes along because every row prints its count in the
             # book's own unit and asks the book for its percentage; without it
             # that is a query per member.

@@ -1240,3 +1240,38 @@ any number of notes, pinned in `test_reactions.py`.
 **Accepted.** Reacting from a `?chapter=N` view returns to the unfiltered `/notes/`.
 Other reaction types (#55), who reacted (#56), reactions on answers (#57) and on replies
 or in the archive (#58) are not done here.
+
+
+## 43. Replies to answers are their own model, one level deep, immutable
+
+**Issue:** #34.
+
+**Shape.** `AnswerReply(answer, author, body, created_on)`: `answer` is CASCADE, `author` is
+PROTECT (as #20), ordered oldest first. It is a separate model rather than a generalised
+`Note.parent` (#28) because an answer hangs off a question, not a book, and a note carries a
+book, a chapter and reactions (#42). Making `Note.parent` point at either would need a
+polymorphic key. One level is structural: an answer is never a reply, so there is no
+`clean()` and no `CheckConstraint`, and the same-book rule is just `answer.question.book`.
+Replies are immutable (#7), so no `updated_on`. There is no uniqueness per member: a reply is
+a remark, not a standing position (#6), so a member may reply twice.
+
+**Posting.** To `/questions/`, told apart from an answer by the presence of an `answer` key in
+POST, as #28 does with `parent`. A blank or junk `answer` is a reply with a bad target and
+errors; it never becomes an answer. `answer` is a `ModelChoiceField` over the current book's
+answers (#21). The author is the session member (#4). Unidentified is a 403 (#16), no current
+book redirects home (#18). A member may reply to their own answer or a deactivated member's
+(#3).
+
+**Removing.** `POST /answers/replies/<pk>/delete/`, author or admin, re-checked in the view.
+A reply on a finished book is kept and refused with a message, since the archive is
+read-only (#23). Deleting a question deletes its answers and their replies; editing an answer
+updates the same row (#6), so its replies stay.
+
+**Cost.** Replies load in one nested prefetch with `select_related("author")`, so they add
+exactly one query to `/questions/` and to `/history/<pk>/` however many exist (#19). The
+`/questions/` pins in `test_answers.py` moved from 3 to 4 and from 5 to 6 for that reason.
+
+**Accepted.** A reply may respond to answer text that has since changed (what editing should
+do to replies is #59). A reply is not hidden from a reader behind on progress (#48). Replying
+returns to `/questions/` with no scroll position kept. Replies are not in the home page's
+"Since you last looked" panel (#40), and have no reactions (#57, #58).

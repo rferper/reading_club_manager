@@ -26,6 +26,10 @@
       </p>
     {% endif %}
 
+    {% if reply_target_error %}
+      <ul class="errorlist">{% for error in reply_target_error %}<li>{{ error }}</li>{% endfor %}</ul>
+    {% endif %}
+
     {% for row in rows %}
       <div class="panel question">
         <p class="question__text">{{ row.question.text|linebreaksbr }}</p>
@@ -46,6 +50,29 @@
               {% if answer.was_edited %}edited {{ answer.updated_on }}{% else %}{{ answer.created_on }}{% endif %}
             </p>
           </div>
+
+          {% for item in answer.reply_rows %}
+            <div class="answer-reply">
+              {{ item.reply.body|linebreaks }}
+              <div class="byline answer-reply__byline">
+                <span>{{ item.reply.author.name }} · {{ item.reply.created_on }}</span>
+                {% if item.may_remove %}
+                  <form method="post" action="{% url 'club:answer_reply_delete' item.reply.pk %}">
+                    {% csrf_token %}
+                    <button type="submit">Remove</button>
+                  </form>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+
+          {% if current_member %}
+            <form method="post" class="answer-reply-form">
+              {% csrf_token %}
+              {{ answer.reply_form.as_p }}
+              <button type="submit">Reply</button>
+            </form>
+          {% endif %}
         {% empty %}
           <p class="empty">Nobody has answered this one yet.</p>
         {% endfor %}

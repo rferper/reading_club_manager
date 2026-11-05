@@ -20,6 +20,11 @@ urlpatterns = [
     path("notes/", views.notes, name="notes"),
     path("notes/<int:pk>/delete/", views.note_delete, name="note_delete"),
     path("notes/<int:pk>/react/", views.note_react, name="note_react"),
+    path(
+        "answers/replies/<int:pk>/delete/",
+        views.answer_reply_delete,
+        name="answer_reply_delete",
+    ),
     path("questions/", views.questions, name="questions"),
     path("questions/add/", views.question_add, name="question_add"),
     path("questions/<int:pk>/edit/", views.question_edit, name="question_edit"),
