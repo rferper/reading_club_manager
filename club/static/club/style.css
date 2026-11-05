@@ -406,6 +406,20 @@ button {
   margin-top: 0;
 }
 
+/* A reply sits under its note, indented; the left rule shows whose it is. */
+.reply,
+.reply-form {
+  margin-left: 1.5rem;
+}
+
+.reply {
+  border-left: 3px solid var(--accent);
+}
+
+.reply-form textarea {
+  width: 100%;
+}
+
 /* Questions --------------------------------------------------------------- */
 
 .question__text {

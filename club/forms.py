@@ -152,6 +152,39 @@ class NoteForm(forms.ModelForm):
         error_messages = {"body": {"required": "A note needs something in it."}}
 
 
+class ReplyForm(forms.ModelForm):
+    """A reply to one top-level note on the current book (decision #28).
+
+    `parent` is a hidden `ModelChoiceField` over the current book's top-level
+    notes only (decision #21), so a missing id, junk, a reply's id and a note
+    on a finished book are all the same form error. Author and book come from
+    the session and the parent, never from the submitter (decision #4).
+    """
+
+    parent = forms.ModelChoiceField(
+        queryset=Note.objects.none(),
+        widget=forms.HiddenInput,
+        error_messages={
+            "required": "Choose a note to reply to.",
+            "invalid_choice": "Choose a note to reply to.",
+        },
+    )
+
+    def __init__(self, *args, book=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if book is not None:
+            self.fields["parent"].queryset = Note.objects.filter(
+                book=book, parent__isnull=True
+            )
+
+    class Meta:
+        model = Note
+        fields = ("body", "parent")
+        labels = {"body": "Your reply"}
+        widgets = {"body": forms.Textarea(attrs={"rows": 2})}
+        error_messages = {"body": {"required": "A reply needs something in it."}}
+
+
 class QuestionForm(forms.ModelForm):
     """A discussion prompt, and where it sits in the sequence.
 
