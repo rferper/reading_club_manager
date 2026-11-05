@@ -84,6 +84,8 @@ runner — not pytest, which is a settled decision rather than an omission. Each
 run builds and destroys its own database, so the suite never touches
 `db.sqlite3`. See `_docs/testing-guidelines.md`.
 
+CI runs `check` and `test` on every push to `master` and on every pull request.
+
 ## Django's own admin
 
 There is a second, entirely separate admin at `/admin/`, which is Django's and
