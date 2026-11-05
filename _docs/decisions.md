@@ -1128,3 +1128,34 @@ progress yet" in the `empty` style. A recorded zero keeps "0%" and a zero-width 
 The view no longer substitutes `or 0`, and the template draws the bar only for a row
 that has a count. A book with no total still says "no page or chapter count recorded".
 The archive already behaved this way and is pinned by a test.
+
+
+## 39. Every count column is nullable: NULL is nothing recorded, 0 is a recorded zero
+
+Settled while building #29. It amends decision #25, which left `pages_read` alone
+rather than making it nullable.
+
+**The rule.** `pages_read`, `chapters_read` and `minutes_read` follow one rule. NULL
+means nothing was recorded in that unit; 0 means the member recorded a zero. A new
+`Progress` stores NULL in every column the member did not fill in. A row saved with
+`pages_read=0` is never turned into NULL.
+
+**Why.** `pages_read` was the only column with `default=0`, and pages is the fallback
+measure, so a row recorded in chapters or minutes also carried a page count of zero.
+When the book lost its other count, that member read as "0 of 400 pages" instead of
+not started, which is the confusion decision #19 exists to prevent.
+
+**Readers.** The overview, the archive, the progress form's "You last recorded" line
+and the trail all read through the book's unit column and already treat NULL as
+nothing recorded, so none of them needed a new branch. `Progress.Meta.ordering` and the
+overview sort NULL after every real count, including 0 (decision #17).
+
+**The data migration (0015).** It sets `pages_read` to NULL on a row only when all of
+these hold: `pages_read` is 0, `chapters_read` or `minutes_read` is recorded, and no
+`ProgressEntry` on the row has a page count. A page entry on the trail proves the zero
+was typed, so such a row keeps it, and so does a page-only row at 0. The reverse writes
+0 into every NULL, because the column is NOT NULL on the way down.
+
+**Not done here.** Converting a recorded number between units is #49. The pointer to
+#21 in decision #25 is stale: #21 is "Reopen a finished book". That text is left as
+it was written.
