@@ -1,0 +1,73 @@
+{% extends "club/base.html" %}
+
+{% block title %}{{ member.name }} on {{ book.title }} — Reading Club Manager{% endblock %}
+
+{% block content %}
+  <h1>{{ member.name }} on {{ book.title }}</h1>
+
+  <p class="byline">
+    by {{ book.author }}{% if book.total_units %} · {{ book.total_units }} {{ book.measure }}{% endif %}
+    {% if not member.is_active %}· no longer on the roster{% endif %}
+  </p>
+
+  {% if rows %}
+    {% if rows|length == 1 %}
+      <p class="empty">
+        One number so far, so there is nothing to compare it to yet.
+      </p>
+    {% endif %}
+
+    {% comment %}
+      Newest first, and a CSS bar per dated entry rather than a plotted line
+      (decision #26). The count and the percentage sit beside the bar, because
+      colour and length never carry the meaning on their own.
+    {% endcomment %}
+    <ol class="trail">
+      {% for row in rows %}
+        <li class="panel trail__entry">
+          <p class="trail__count">
+            {{ row.entry.units_read }}{% if book.total_units %} of {{ book.total_units }}{% endif %} {{ book.measure }}
+            {% if row.change is not None %}
+              <span class="trail__change">{% if row.change > 0 %}+{{ row.change }} {{ book.measure }}{% elif row.change < 0 %}{{ row.change }} {{ book.measure }}{% else %}no change{% endif %}{% if row.percent_change is not None %}, {% if row.percent_change > 0 %}+{% endif %}{{ row.percent_change }}%{% endif %}</span>
+            {% endif %}
+          </p>
+
+          <p class="trail__bar">
+            {% if row.entry.percent is not None %}
+              <span class="progress" aria-hidden="true"><span class="progress__fill" style="width: {{ row.entry.percent }}%"></span></span>
+              {{ row.entry.percent }}%
+            {% else %}
+              <span class="empty">no page or chapter count recorded</span>
+            {% endif %}
+          </p>
+
+          <p class="byline">{{ row.entry.recorded_on }}</p>
+        </li>
+      {% endfor %}
+    </ol>
+  {% elif not recorded_in_other_unit %}
+    <p class="empty">
+      {{ member.name }} has not recorded anything on this one yet.
+    </p>
+  {% endif %}
+
+  {% if recorded_in_other_unit %}
+    {% comment %}
+      Decision #25 already makes these entries read as "not started" on the
+      overview. This is the same fact said out loud, rather than a page that
+      goes quietly blank or reads a chapter count against a page count.
+    {% endcomment %}
+    <p class="empty">
+      {% if recorded_in_other_unit == 1 %}One earlier entry was{% else %}{{ recorded_in_other_unit }} earlier entries were{% endif %}
+      recorded in {{ other_measure }}, before this book was measured in {{ book.measure }},
+      so {% if recorded_in_other_unit == 1 %}it is{% else %}they are{% endif %} not on this trail.
+    </p>
+  {% endif %}
+
+  <p>
+    <a href="{% url 'club:history_detail' book.pk %}">Back to {{ book.title }}</a>
+    {% if book.is_current %}
+      · <a href="{% url 'club:progress' %}">everyone's progress</a>
+    {% endif %}
+  </p>
+{% endblock %}

@@ -78,7 +78,7 @@
   <h2>How far everyone got</h2>
   {% for row in progress %}
     <p>
-      {{ row.member.name }} —
+      <a href="{% url 'club:progress_trail' book.pk row.member.pk %}">{{ row.member.name }}</a> —
       {% if row.units_read is not None %}
         {{ row.units_read }} {{ book.measure }}{% if row.percent is not None %}, {{ row.percent }}%{% endif %}
       {% else %}

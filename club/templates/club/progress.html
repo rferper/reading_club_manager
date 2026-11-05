@@ -31,7 +31,14 @@
       <tbody>
         {% for row in rows %}
           <tr>
-            <th scope="row">{{ row.member.name }}</th>
+            {% comment %}
+              The name is the link to that member's trail through this book.
+              Both the book and the member are already loaded, so a link per
+              row is not a query per row — the overview never reads the log.
+            {% endcomment %}
+            <th scope="row">
+              <a href="{% url 'club:progress_trail' book.pk row.member.pk %}">{{ row.member.name }}</a>
+            </th>
 
             <td>
               {% if row.has_recorded %}

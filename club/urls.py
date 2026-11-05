@@ -30,4 +30,9 @@ urlpatterns = [
     path("books/<int:pk>/edit/", views.book_edit, name="book_edit"),
     path("books/<int:pk>/finish/", views.book_finish, name="book_finish"),
     path("books/<int:pk>/rate/", views.book_rate, name="book_rate"),
+    path(
+        "books/<int:pk>/progress/<int:member_pk>/",
+        views.progress_trail,
+        name="progress_trail",
+    ),
 ]
