@@ -5,7 +5,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, models, transaction
-from django.db.models import Avg, Count, F, OuterRef, Prefetch, Subquery
+from django.db.models import Avg, Count, F, OuterRef, Prefetch, Q, Subquery
 from django.db.models.functions import Lower
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -753,12 +753,19 @@ def question_delete(request, pk):
     return render(request, "club/question_confirm_delete.html", {"question": question})
 
 
+HISTORY_QUERY_MAX = 200
+
+
 def history(request):
     """Every book that is not the club's current read, newest finished first.
 
     Uncapped, and staying that way — a club reads a dozen books a year, and
-    #20 holds search and pagination for whenever that stops being true.
+    #37 holds pagination for whenever that stops being true.
+
+    `?q=` narrows it (decision 29): every word must appear, ignoring case, in
+    the title or the author. A blank `q` is no search at all.
     """
+    query = request.GET.get("q", "").strip()[:HISTORY_QUERY_MAX]
     books = (
         Book.objects.filter(is_current=False)
         .annotate(
@@ -777,8 +784,24 @@ def history(request):
             "-pk",
         )
     )
+    # The filter reads only the book's own columns, so it adds no join and the
+    # rating aggregates above are not inflated. `icontains` escapes `%` and `_`.
+    for word in query.split():
+        books = books.filter(Q(title__icontains=word) | Q(author__icontains=word))
 
-    return render(request, "club/history.html", {"books": books})
+    books = list(books)
+
+    return render(
+        request,
+        "club/history.html",
+        {
+            "books": books,
+            "query": query,
+            "match_count": len(books) if query else None,
+            "archive_has_books": bool(books)
+            or Book.objects.filter(is_current=False).exists(),
+        },
+    )
 
 
 def history_detail(request, pk):
