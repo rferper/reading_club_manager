@@ -950,7 +950,7 @@ def history_detail(request, pk):
             # score to, or nothing finished to score.
             "rating_form": (
                 MemberRatingForm(initial=_rating_initial(my_rating))
-                if viewer is not None and not book.is_current
+                if viewer is not None and book.is_finished
                 else None
             ),
         },
@@ -1115,8 +1115,10 @@ def book_rate(request, pk):
     GET-and-error surface, so a failed submission comes back somewhere with a
     form on it rather than losing the score on a redirect.
 
-    The current read is refused — the club has not finished it, and a score for
-    a book somebody is halfway through is not a score. Refused here and not
+    A book is finished when it is not current and has a finish date
+    (`Book.is_finished`, decision #36). The current read is refused — a score
+    for a book somebody is halfway through is not a score — and so is a book
+    with no finish date, which the club never finished. Refused here and not
     only hidden there: a hidden control is decoration.
     """
     book = get_object_or_404(Book, pk=pk)
@@ -1125,6 +1127,14 @@ def book_rate(request, pk):
         messages.error(
             request,
             f"The club is still reading {book.title}. Rate it once it is finished.",
+        )
+        return redirect("club:history_detail", pk=book.pk)
+
+    if not book.is_finished:
+        messages.error(
+            request,
+            f"{book.title} has no finish date yet, so it cannot be rated. "
+            "Ratings open once it has one.",
         )
         return redirect("club:history_detail", pk=book.pk)
 

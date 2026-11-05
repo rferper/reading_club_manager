@@ -234,6 +234,90 @@ class RatingTheCurrentReadTests(TestCase):
         self.assertContains(response, "the club is still reading it")
 
 
+class RatingAnUnfinishedBookTests(TestCase):
+    """A book that is neither current nor finished cannot be rated (decision #36)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.book = Book.objects.create(title="Ulysses", author="James Joyce")
+
+    def setUp(self):
+        session = self.client.session
+        session["member_id"] = self.ada.pk
+        session.save()
+        self.url = reverse("club:book_rate", args=[self.book.pk])
+        self.detail = reverse("club:history_detail", args=[self.book.pk])
+
+    def test_a_post_stores_nothing_and_says_there_is_no_finish_date(self):
+        response = self.client.post(self.url, {"score": "4"}, follow=True)
+
+        self.assertRedirects(response, self.detail)
+        self.assertContains(response, "Ulysses has no finish date yet")
+        self.assertNotContains(response, "still reading")
+        self.assertEqual(MemberRating.objects.count(), 0)
+
+    def test_a_get_is_refused_the_same_way(self):
+        response = self.client.get(self.url, follow=True)
+
+        self.assertRedirects(response, self.detail)
+        self.assertContains(response, "Ulysses has no finish date yet")
+
+    def test_the_detail_page_offers_no_form_or_link(self):
+        response = self.client.get(self.detail)
+
+        self.assertNotContains(response, self.url)
+        self.assertNotContains(response, "Rate this book")
+        self.assertContains(response, "once the book has a finish date")
+        self.assertIsNone(response.context["rating_form"])
+
+    def test_a_stranger_sees_the_same_and_no_identify_prompt(self):
+        session = self.client.session
+        session.flush()
+
+        response = self.client.get(self.detail)
+
+        self.assertContains(response, "once the book has a finish date")
+        self.assertNotContains(response, "Say who you are")
+
+    def test_an_unidentified_post_is_still_a_403(self):
+        session = self.client.session
+        session.flush()
+
+        response = self.client.post(self.url, {"score": "4"})
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_a_stored_score_survives_and_is_still_listed(self):
+        MemberRating.objects.create(book=self.book, member=self.ada, score=3)
+
+        response = self.client.get(self.detail)
+
+        self.assertContains(response, "Ada")
+        self.assertContains(response, "3 out of 5")
+        self.assertEqual(MemberRating.objects.count(), 1)
+
+    def test_giving_it_a_finish_date_opens_rating(self):
+        self.book.finished_on = date(2025, 6, 1)
+        self.book.save()
+
+        self.client.post(self.url, {"score": "4"})
+
+        self.assertEqual(MemberRating.objects.get().score, 4)
+        self.assertContains(self.client.get(self.detail), "Change your rating")
+
+    def test_a_current_read_with_a_date_is_still_refused_as_still_reading(self):
+        self.book.is_current = True
+        self.book.finished_on = date(2025, 6, 1)
+        self.book.save()
+
+        response = self.client.post(self.url, {"score": "4"}, follow=True)
+
+        self.assertContains(response, "still reading Ulysses")
+        self.assertEqual(MemberRating.objects.count(), 0)
+        self.assertIsNone(self.client.get(self.detail).context["rating_form"])
+
+
 class RatingIdentityTests(TestCase):
     """Nobody rates as nobody."""
 

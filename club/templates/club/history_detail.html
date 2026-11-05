@@ -55,7 +55,9 @@
     </p>
   {% endif %}
 
-  {% if not book.is_current %}
+  {% if not book.is_current and not book.is_finished %}
+    <p class="empty">Ratings open once the book has a finish date.</p>
+  {% elif book.is_finished %}
     {% if rating_form %}
       {% comment %}
         The one form on a finished book's page. The discussion is closed and
