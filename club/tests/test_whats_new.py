@@ -6,14 +6,16 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from ..models import Answer, Book, Member, Note, Question
+from ..models import Answer, AnswerReply, Book, Member, Note, Question
 
 PANEL = "Since you last looked"
 
 # Queries on the home page for an identified member, panel included. Before
-# #40 it was HOME_QUERIES_BEFORE; the notes aggregate adds exactly one.
+# #40 it was HOME_QUERIES_BEFORE; the notes aggregate adds exactly one. The
+# answer-reply count (#60) adds one more.
 HOME_QUERIES_BEFORE = 5
 HOME_QUERIES_WITH_PANEL = HOME_QUERIES_BEFORE + 1
+HOME_QUERIES_WITH_ANSWER_REPLIES = HOME_QUERIES_WITH_PANEL + 1
 
 
 class WhatsNewTests(TestCase):
@@ -159,7 +161,10 @@ class WhatsNewTests(TestCase):
 
 
 class NotesInPanelTests(TestCase):
-    """New notes and note replies from others (#40). Answer replies are not here."""
+    """New notes and note replies from others (#40).
+
+    Answer replies are their own item, see AnswerRepliesInPanelTests (#60).
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -358,11 +363,284 @@ class NotesInPanelTests(TestCase):
             self.home()
 
         self.assertEqual(len(one), len(many))
-        self.assertEqual(len(many), HOME_QUERIES_WITH_PANEL)
+        self.assertEqual(len(many), HOME_QUERIES_WITH_ANSWER_REPLIES)
 
     def test_mark_seen_clears_notes_and_replies(self):
         top = self.note()
         self.note(parent=top)
+        self.assertContains(self.home(), PANEL)
+
+        self.client.post(reverse("club:mark_seen"))
+
+        self.assertNotContains(self.home(), PANEL)
+
+
+class AnswerRepliesInPanelTests(TestCase):
+    """New replies to answers from others (#60, decisions 43 and 48)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ada = Member.objects.create(name="Ada")
+        cls.bob = Member.objects.create(name="Bob")
+        cls.cy = Member.objects.create(name="Cy")
+
+    def setUp(self):
+        self.book = Book.objects.create(
+            title="Middlemarch", author="George Eliot", is_current=True
+        )
+        Book.objects.filter(pk=self.book.pk).update(
+            created_on=timezone.now() - timedelta(hours=1)
+        )
+        # Ada last looked ten minutes ago; whole-minute offsets avoid clock ties.
+        Member.objects.filter(pk=self.ada.pk).update(
+            notifications_seen_at=timezone.now() - timedelta(minutes=10)
+        )
+        self.ada.refresh_from_db()
+        self.question = Question.objects.create(book=self.book, text="Q")
+        Question.objects.filter(pk=self.question.pk).update(
+            created_on=timezone.now() - timedelta(minutes=30)
+        )
+        self.answer = self.answer_by(self.bob)
+        session = self.client.session
+        session["member_id"] = self.ada.pk
+        session.save()
+
+    def answer_by(self, member, question=None, minutes_ago=30):
+        answer = Answer.objects.create(
+            question=question or self.question, member=member, body="A"
+        )
+        Answer.objects.filter(pk=answer.pk).update(
+            created_on=timezone.now() - timedelta(minutes=minutes_ago)
+        )
+        return answer
+
+    def reply(self, author=None, answer=None, minutes_ago=5):
+        reply = AnswerReply.objects.create(
+            answer=answer or self.answer, author=author or self.bob, body="text"
+        )
+        AnswerReply.objects.filter(pk=reply.pk).update(
+            created_on=timezone.now() - timedelta(minutes=minutes_ago)
+        )
+        return reply
+
+    def home(self):
+        return self.client.get(reverse("club:home"))
+
+    def test_other_members_reply_is_counted_and_links_to_questions(self):
+        self.reply()
+
+        response = self.home()
+
+        self.assertContains(response, PANEL)
+        self.assertContains(
+            response,
+            f'href="{reverse("club:questions")}">1 new answer reply</a>',
+        )
+        self.assertContains(response, "from other members")
+
+    def test_plural_reply_count(self):
+        self.reply()
+        self.reply(author=self.cy)
+
+        self.assertContains(self.home(), "2 new answer replies")
+
+    def test_own_reply_is_not_counted(self):
+        self.reply(author=self.ada)
+
+        self.assertNotContains(self.home(), PANEL)
+
+    def test_reply_under_my_own_answer_is_counted(self):
+        mine = self.answer_by(self.ada)
+        self.reply(answer=mine)
+
+        self.assertContains(self.home(), "1 new answer reply")
+
+    def test_reply_before_the_marker_is_not_counted(self):
+        self.reply(minutes_ago=11)
+        self.reply(minutes_ago=60)
+
+        self.assertNotContains(self.home(), PANEL)
+
+    def test_marker_is_strict_for_answer_replies(self):
+        instant = timezone.now().replace(microsecond=0) - timedelta(minutes=5)
+        Member.objects.filter(pk=self.ada.pk).update(notifications_seen_at=instant)
+        tie = self.reply()
+        AnswerReply.objects.filter(pk=tie.pk).update(created_on=instant)
+
+        self.assertNotContains(self.home(), PANEL)
+
+        AnswerReply.objects.filter(pk=tie.pk).update(
+            created_on=instant + timedelta(seconds=1)
+        )
+        self.assertContains(self.home(), "1 new answer reply")
+
+    def test_reply_on_a_finished_book_is_not_counted(self):
+        old = Book.objects.create(title="Old", author="X")
+        old_question = Question.objects.create(book=old, text="Old Q")
+        old_answer = self.answer_by(self.bob, question=old_question)
+        self.reply(answer=old_answer)
+
+        self.assertNotContains(self.home(), PANEL)
+
+    def test_deactivated_author_still_counts(self):
+        self.reply()
+        Member.objects.filter(pk=self.bob.pk).update(is_active=False)
+
+        self.assertContains(self.home(), "1 new answer reply")
+
+    def test_deleting_a_reply_drops_it_from_the_count(self):
+        self.reply()
+        gone = self.reply()
+        self.assertContains(self.home(), "2 new answer replies")
+
+        gone.delete()
+
+        response = self.home()
+        self.assertContains(response, "1 new answer reply")
+        self.assertNotContains(response, "2 new answer replies")
+
+    def test_deleting_the_answer_cascades_its_replies_out(self):
+        self.reply()
+        self.assertContains(self.home(), PANEL)
+
+        self.answer.delete()
+
+        self.assertNotContains(self.home(), PANEL)
+
+    def test_deleting_the_question_cascades_its_replies_out(self):
+        self.reply()
+        self.assertContains(self.home(), PANEL)
+
+        self.question.delete()
+
+        self.assertNotContains(self.home(), PANEL)
+
+    def test_editing_an_answer_does_not_make_it_or_its_replies_new(self):
+        self.reply(minutes_ago=11)  # before the marker
+        self.answer.refresh_from_db()  # update() left the instance stale
+        self.answer.body = "edited"
+        self.answer.save()
+
+        self.assertNotContains(self.home(), PANEL)
+
+    def test_answers_and_answer_replies_are_counted_separately(self):
+        self.answer_by(self.cy, minutes_ago=5)
+        self.reply()
+        self.reply()
+
+        response = self.home()
+
+        self.assertContains(response, "1 new answer</a>")
+        self.assertContains(response, "2 new answer replies")
+
+    def test_null_marker_counts_from_the_start_of_joined_on(self):
+        Member.objects.filter(pk=self.cy.pk).update(
+            joined_on=timezone.localdate() - timedelta(days=3)
+        )
+        session = self.client.session
+        session["member_id"] = self.cy.pk
+        session.save()
+        self.reply(minutes_ago=5)
+        self.reply(minutes_ago=10 * 24 * 60)
+
+        response = self.home()
+
+        self.assertContains(response, "1 new answer reply")
+        self.assertNotContains(response, "2 new answer replies")
+
+    def test_a_lone_reply_makes_the_panel_appear(self):
+        self.reply()
+
+        self.assertContains(self.home(), PANEL)
+
+    def test_nothing_new_keeps_the_panel_hidden(self):
+        self.assertNotContains(self.home(), PANEL)
+
+    def test_no_current_book_shows_no_panel(self):
+        self.reply()
+        Book.objects.filter(pk=self.book.pk).update(is_current=False)
+
+        self.assertNotContains(self.home(), PANEL)
+
+    def test_nobody_identified_shows_no_panel(self):
+        self.reply()
+        session = self.client.session
+        del session["member_id"]
+        session.save()
+
+        self.assertNotContains(self.home(), PANEL)
+
+    def test_deactivated_viewer_sees_no_panel(self):
+        self.reply()
+        Member.objects.filter(pk=self.ada.pk).update(is_active=False)
+
+        self.assertNotContains(self.home(), PANEL)
+
+    def test_note_reply_and_answer_reply_are_distinct_items(self):
+        top = Note.objects.create(book=self.book, author=self.ada, body="n")
+        Note.objects.filter(pk=top.pk).update(
+            created_on=timezone.now() - timedelta(minutes=20)
+        )
+        note_reply = Note.objects.create(
+            book=self.book, author=self.bob, parent=top, body="r"
+        )
+        Note.objects.filter(pk=note_reply.pk).update(
+            created_on=timezone.now() - timedelta(minutes=5)
+        )
+        self.reply()
+
+        response = self.home()
+
+        self.assertContains(
+            response, f'href="{reverse("club:notes")}">1 new reply</a>'
+        )
+        self.assertContains(
+            response,
+            f'href="{reverse("club:questions")}">1 new answer reply</a>',
+        )
+
+    def test_answer_replies_come_last(self):
+        Question.objects.filter(pk=self.question.pk).update(
+            created_on=timezone.now() - timedelta(minutes=5)
+        )
+        Answer.objects.filter(pk=self.answer.pk).update(
+            created_on=timezone.now() - timedelta(minutes=5)
+        )
+        top = Note.objects.create(book=self.book, author=self.bob, body="n")
+        Note.objects.create(book=self.book, author=self.bob, parent=top, body="r")
+        Note.objects.filter(book=self.book).update(
+            created_on=timezone.now() - timedelta(minutes=5)
+        )
+        self.reply()
+
+        html = self.home().content.decode()
+
+        positions = [
+            html.index("1 new answer</a>"),
+            html.index("1 new note"),
+            html.index("1 new reply"),
+            html.index("1 new answer reply"),
+        ]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_query_count_does_not_grow_with_replies(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        self.reply()
+        with CaptureQueriesContext(connection) as one:
+            self.home()
+        answers = [self.answer, self.answer_by(self.cy), self.answer_by(self.ada)]
+        for i in range(19):
+            self.reply(author=(self.bob, self.cy)[i % 2], answer=answers[i % 3])
+        with CaptureQueriesContext(connection) as many:
+            self.home()
+
+        self.assertEqual(len(one), len(many))
+        self.assertEqual(len(many), HOME_QUERIES_WITH_ANSWER_REPLIES)
+
+    def test_mark_seen_clears_answer_replies(self):
+        self.reply()
         self.assertContains(self.home(), PANEL)
 
         self.client.post(reverse("club:mark_seen"))

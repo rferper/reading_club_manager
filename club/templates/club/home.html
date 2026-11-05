@@ -35,6 +35,12 @@
             from other members
           </li>
         {% endif %}
+        {% if whats_new.answer_reply_count %}
+          <li>
+            <a href="{% url 'club:questions' %}">{{ whats_new.answer_reply_count }} new answer {{ whats_new.answer_reply_count|pluralize:"reply,replies" }}</a>
+            from other members
+          </li>
+        {% endif %}
       </ul>
       <form method="post" action="{% url 'club:mark_seen' %}">
         {% csrf_token %}

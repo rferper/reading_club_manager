@@ -73,7 +73,8 @@ def _whats_new(book, member):
     None means there is nothing to show: no book, nobody identified, or nothing
     new. The marker is `notifications_seen_at`, or the start of `joined_on`
     when it is null (decision #31). Answers use `created_on`, so editing one
-    later does not bring it back, and the member's own never count.
+    later does not bring it back, and the member's own never count. Notes,
+    note replies and answer replies are other members' only, counted the same way.
     """
     if book is None or member is None:
         return None
@@ -91,7 +92,7 @@ def _whats_new(book, member):
         .count()
     )
     # One query for both counts: other members' new top-level notes and new
-    # note replies on this book (#40). Answer replies are not counted (#60).
+    # note replies on this book (#40).
     new_notes = (
         Note.objects.filter(book=book, created_on__gt=since)
         .exclude(author=member)
@@ -99,6 +100,15 @@ def _whats_new(book, member):
             notes=Count("pk", filter=Q(parent__isnull=True)),
             replies=Count("pk", filter=Q(parent__isnull=False)),
         )
+    )
+    # Replies to answers live in their own model (decision 43), so they take
+    # one more count rather than joining the aggregate above (#60).
+    new_answer_replies = (
+        AnswerReply.objects.filter(
+            answer__question__book=book, created_on__gt=since
+        )
+        .exclude(author=member)
+        .count()
     )
     book_is_new = book.created_on > since
 
@@ -108,6 +118,7 @@ def _whats_new(book, member):
         or book_is_new
         or new_notes["notes"]
         or new_notes["replies"]
+        or new_answer_replies
     ):
         return None
 
@@ -117,6 +128,7 @@ def _whats_new(book, member):
         "new_book": book if book_is_new else None,
         "note_count": new_notes["notes"],
         "reply_count": new_notes["replies"],
+        "answer_reply_count": new_answer_replies,
     }
 
 
