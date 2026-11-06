@@ -659,11 +659,14 @@ def notes(request):
 def _chapter_filter(request):
     """The `?chapter=` value as a positive int, or None (decision #35).
 
-    Missing, blank, junk, decimal, zero and negative all mean no filter.
+    Missing, blank, junk, decimal, zero, negative and absurdly long all mean no
+    filter. The length cap is not cosmetic: `int()` raises `ValueError` on a
+    string of more than 4300 digits, which would be a 500 for anyone, logged in
+    or not.
     """
     raw = request.GET.get("chapter", "").strip()
 
-    if not raw.isascii() or not raw.isdigit():
+    if len(raw) > 9 or not raw.isascii() or not raw.isdigit():
         return None
 
     value = int(raw)

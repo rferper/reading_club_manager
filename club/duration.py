@@ -28,6 +28,11 @@ def parse_minutes(text):
     """
     cleaned = (text or "").strip().lower()
 
+    # The page caps the input at 20 characters, but a hand-made POST is not
+    # held to that, and `int()` raises ValueError (a 500) past 4300 digits.
+    if len(cleaned) > 20:
+        raise ValidationError(f"That is too long for a length of time. {EXAMPLE}")
+
     if cleaned == "0":
         return 0
 

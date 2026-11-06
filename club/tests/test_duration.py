@@ -54,6 +54,13 @@ class ParseMinutesTests(SimpleTestCase):
 
                 self.assertIn("4h 12m", caught.exception.messages[0])
 
+    def test_an_absurdly_long_input_is_refused_not_a_crash(self):
+        # int() raises ValueError past 4300 digits; that would be a 500.
+        for text in ("9" * 21 + "m", "9" * 5000 + "m", "9" * 5000 + "h"):
+            with self.subTest(length=len(text)):
+                with self.assertRaises(ValidationError):
+                    parse_minutes(text)
+
 
 class FormatMinutesTests(SimpleTestCase):
     def test_hours_and_minutes_read_as_the_issue_says(self):

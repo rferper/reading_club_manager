@@ -168,6 +168,16 @@ class NoteChapterFilterTests(ChapterTestBase):
                 self.assertEqual(len(response.context["rows"]), 4)
                 self.assertNotContains(response, "Showing only")
 
+    def test_an_absurdly_long_number_is_ignored_not_a_server_error(self):
+        # More than 4300 digits makes int() raise; the page must not 500.
+        for digits in ("9" * 10, "9" * 30, "9" * 5000):
+            with self.subTest(length=len(digits)):
+                response = self.notes(f"?chapter={digits}")
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(len(response.context["rows"]), 4)
+                self.assertNotContains(response, "Showing only")
+
     def test_the_unfiltered_list_includes_unanchored_notes(self):
         self.assertEqual(len(self.notes().context["rows"]), 4)
 
