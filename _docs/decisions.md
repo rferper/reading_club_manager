@@ -1408,3 +1408,26 @@ are pinned in `test_reactions.py` as regression guards, since they held before t
 
 **Not here.** Replies show no count and no control. Whether replies can be reacted to is
 #61. Reaction types (#55), who reacted (#56) and reactions on answers (#57) are separate.
+
+## 51. Owner answers to the decision-only backlog
+
+**Issues:** #35, #37, #41, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #59, #61. **Date:** 2026-11-06. Answered by the owner; nothing is built under any of them.
+
+- **#35 Reply depth.** Stays one level. Reaffirms 28.
+- **#37 History pagination.** Deferred. `/history/` stays uncapped (22); revisit when the unfiltered archive passes about 100 books.
+- **#41 Notifications outside the site.** Not wanted. No email, no stored addresses. The in-site panel (31) is the whole story.
+- **#45 Rate limiting wrong PINs.** Not wanted. Reaffirms 5: the PIN guards against accident. Use a longer PIN in production if guessing worries the club.
+- **#46 Changing the PIN from the UI.** Stays environment-only (`CLUB_ADMIN_PIN`).
+- **#47 Ebook locations.** No. The owner wants page numbers or percent; no further measures. (Chapters and minutes already exist, see the open question about them.)
+- **#48 Spoiler hiding.** No. Notes keep a visible label; members warn each other in text.
+- **#49 Converting progress between measures.** Never convert; members re-record. The owner says an admin would not change a book's measure anyway.
+- **#50 Admin removing another member's progress entry.** No; only the author. `/admin/` remains the escape hatch.
+- **#51 Removing the newest entry.** Refused; save the right number first, then remove the older wrong one.
+- **#52 Editing an entry.** Removal only; no editing. Keeps 26 append-only.
+- **#53 "Recent".** Fixed 7 days (a).
+- **#54 Movement on the landing page.** Not added. `/progress/` stays the one place.
+- **#55 Reaction types.** Only "Agree".
+- **#56 Who reacted.** Counts only, never names.
+- **#57 Reactions on answers.** No.
+- **#59 Editing an answer with replies.** Replies stay; the existing "edited" marker is the only signal.
+- **#61 Reactions on replies.** No. Reaffirms 42.
